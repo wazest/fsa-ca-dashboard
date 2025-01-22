@@ -35,10 +35,6 @@
             <h3>Active Subscriptions</h3>
             <p>{{ activeSubscriptions }}</p>
           </div>
-          <div class="stat-card">
-            <h3>Trial to Regular Conversion</h3>
-            <p>{{ convertedCustomers }}</p>
-          </div>
         </div>
 
         <div v-if="datasets.length > 0" class="charts-container">
@@ -56,17 +52,17 @@
               :options="barChartOptions"
             />
           </div>
-          <div class="chart">
-            <h3>Trial to Regular Conversion</h3>
-            <Bar
-              :data="conversionChartData"
-              :options="barChartOptions"
-            />
-          </div>
           <div class="chart wide-chart">
             <h3>Subscription Growth Over Time</h3>
             <Line
               :data="subscriptionGrowthData"
+              :options="lineChartOptions"
+            />
+          </div>
+          <div class="chart wide-chart">
+            <h3>Athlete Packages</h3>
+            <Line
+              :data="athletePackagesData"
               :options="lineChartOptions"
             />
           </div>
@@ -159,6 +155,11 @@ const isRelevantSubscription = (subscription: string): boolean => {
   return ['Striking', 'Grappling', 'MMA', 'Fit & Athletik', 'Kinder'].includes(type)
 }
 
+const isAthletePackage = (subscription: string): boolean => {
+  const subscriptionLower = subscription.toLowerCase()
+  return subscriptionLower.includes('athlete') && subscriptionLower.includes('package')
+}
+
 const getSubscriptionType = (subscription: string): string => {
   const subscriptionLower = subscription.toLowerCase()
   if (subscriptionLower.includes('striking')) return 'Striking'
@@ -170,47 +171,6 @@ const getSubscriptionType = (subscription: string): string => {
   if (subscriptionLower.includes('kinder')) return 'Kinder'
   return 'Other'
 }
-
-const isTrialSubscription = (subscription: string): boolean => {
-  return subscription.toLowerCase().includes('probe')
-}
-
-const isRegularSubscription = (subscription: string): boolean => {
-  const type = getSubscriptionType(subscription)
-  return isRelevantSubscription(subscription) && !isTrialSubscription(subscription)
-}
-
-const getCustomerHistory = (customerId: string): Customer[] => {
-  return datasets.value.flatMap(dataset => 
-    dataset.customers.filter(customer => customer.id === customerId)
-  )
-}
-
-const hasHadTrialSubscription = (customerId: string): boolean => {
-  const history = getCustomerHistory(customerId)
-  return history.some(record => isTrialSubscription(record.subscription))
-}
-
-const hasHadRegularSubscription = (customerId: string): boolean => {
-  const history = getCustomerHistory(customerId)
-  return history.some(record => isRegularSubscription(record.subscription))
-}
-
-const convertedCustomers = computed(() => {
-  if (datasets.value.length === 0) return 0
-  
-  const latestDataset = datasets.value[datasets.value.length - 1]
-  const uniqueCustomers = new Set(latestDataset.customers.map(c => c.id))
-  
-  let converted = 0
-  uniqueCustomers.forEach(customerId => {
-    if (hasHadTrialSubscription(customerId) && hasHadRegularSubscription(customerId)) {
-      converted++
-    }
-  })
-  
-  return converted
-})
 
 const totalCustomers = computed(() => {
   if (datasets.value.length === 0) return 0
@@ -267,30 +227,31 @@ const subscriptionBarData = computed(() => ({
   }]
 }))
 
-const conversionChartData = computed(() => {
+const athletePackagesData = computed(() => {
   if (datasets.value.length === 0) return { labels: [], datasets: [] }
 
-  const latestDataset = datasets.value[datasets.value.length - 1]
-  const uniqueCustomers = new Set(latestDataset.customers.map(c => c.id))
-  
-  const totalTrials = Array.from(uniqueCustomers).filter(customerId => 
-    hasHadTrialSubscription(customerId)
-  ).length
+  // Filter datasets to last 2 years
+  const twoYearsAgo = subYears(new Date(), 2)
+  const relevantDatasets = datasets.value.filter(ds => ds.timestamp >= twoYearsAgo)
 
-  const converted = Array.from(uniqueCustomers).filter(customerId => 
-    hasHadTrialSubscription(customerId) && hasHadRegularSubscription(customerId)
-  ).length
+  // Sort datasets by timestamp
+  const sortedDatasets = [...relevantDatasets].sort((a, b) => 
+    a.timestamp.getTime() - b.timestamp.getTime()
+  )
 
-  const trialOnly = Array.from(uniqueCustomers).filter(customerId => 
-    hasHadTrialSubscription(customerId) && !hasHadRegularSubscription(customerId)
-  ).length
+  // Create labels (dates)
+  const labels = sortedDatasets.map(ds => format(ds.timestamp, 'MMM yyyy'))
 
   return {
-    labels: ['Total Trial Customers', 'Converted to Regular', 'Trial Only'],
+    labels,
     datasets: [{
-      label: 'Number of Customers',
-      data: [totalTrials, converted, trialOnly],
-      backgroundColor: ['#5a91db', '#1a519b', '#999999']
+      label: 'Athlete Packages',
+      data: sortedDatasets.map(ds => 
+        ds.customers.filter(c => isAthletePackage(c.subscription)).length
+      ),
+      borderColor: '#1a519b',
+      backgroundColor: '#1a519b',
+      tension: 0.4
     }]
   }
 })
