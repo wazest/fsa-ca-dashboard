@@ -60,9 +60,27 @@
             <h3>Subscription Distribution (Bar)</h3>
             <Bar :data="subscriptionBarData" :options="barChartOptions" />
           </div>
+          <div class="chart">
+            <h3>All Subscriptions Potential Revenue</h3>
+            <Pie
+              :data="allSubscriptionsRevenueData"
+              :options="revenueChartOptions"
+            />
+          </div>
+          <div class="chart">
+            <h3>Relevant Types Potential Revenue</h3>
+            <Pie
+              :data="relevantTypesRevenueData"
+              :options="revenueChartOptions"
+            />
+          </div>
           <div class="chart wide-chart">
             <h3>Subscription Growth Over Time</h3>
             <Line :data="subscriptionGrowthData" :options="lineChartOptions" />
+          </div>
+          <div class="chart wide-chart">
+            <h3>Trial Training Overview</h3>
+            <Line :data="probetrainingData" :options="lineChartOptions" />
           </div>
           <div class="chart wide-chart">
             <h3>Special Training Packages</h3>
@@ -89,7 +107,7 @@ import {
   PointElement,
 } from "chart.js";
 import { Pie, Bar, Line } from "vue-chartjs";
-import { parse, subYears, format, getYear } from "date-fns";
+import { parse, format, getYear } from "date-fns";
 import * as XLSX from "xlsx";
 
 ChartJS.register(
@@ -107,10 +125,10 @@ ChartJS.register(
 interface Customer {
   id: string;
   subscription: string;
-  validFrom: Date;
-  validUntil: Date;
+  validFrom: Date | null;
+  validUntil: Date | null;
   pendingBookings: number;
-  purchaseDate: Date;
+  purchaseDate: Date | null;
   subscriptionStatus: string;
   customer: string;
   salutation: string;
@@ -122,7 +140,7 @@ interface Customer {
   mobile: string;
   phonePrivate: string;
   phoneWork: string;
-  birthday: Date;
+  birthday: Date | null;
   email: string;
   language: string;
 }
@@ -132,21 +150,76 @@ interface DataSet {
   customers: Customer[];
 }
 
+interface SubscriptionPrice {
+  Abo: string;
+  Preis: number;
+}
+
+const subscriptionPrices: SubscriptionPrice[] = [
+  {
+    Abo: "MMA 1 Jahr",
+    Preis: 1440,
+  },
+  {
+    Abo: "MMA 1 Jahr Reduziert",
+    Preis: 1225,
+  },
+];
+
 const datasets = ref<DataSet[]>([]);
 const processing = ref(false);
 const error = ref("");
 const selectedFiles = ref<FileList | null>(null);
 const selectedYears = ref<number[]>([]);
 
+const isValidDate = (date: any): boolean => {
+  return date instanceof Date && !isNaN(date.getTime()) && date.getTime() > 0;
+};
+
+const parseExcelDate = (date: any): Date | null => {
+  console.log("Parsing Excel date:", {
+    rawValue: date,
+    type: typeof date,
+    isNumber: typeof date === "number",
+    isString: typeof date === "string",
+  });
+
+  if (!date) return null;
+
+  if (typeof date === "string") {
+    try {
+      const [day, month, year] = date.split(".");
+      if (day && month && year) {
+        const parsedDate = new Date(
+          parseInt(year),
+          parseInt(month) - 1,
+          parseInt(day)
+        );
+
+        console.log("Parsed German date:", {
+          originalValue: date,
+          parsedDate,
+          isValid: isValidDate(parsedDate),
+        });
+
+        return isValidDate(parsedDate) ? parsedDate : null;
+      }
+    } catch (e) {
+      console.log("Error parsing German date:", e);
+    }
+  }
+
+  return null;
+};
+
 const availableYears = computed(() => {
   if (datasets.value.length === 0) return [];
   const years = new Set(datasets.value.map((ds) => getYear(ds.timestamp)));
-  return Array.from(years).sort((a, b) => b - a); // Sort descending
+  return Array.from(years).sort((a, b) => b - a);
 });
 
 const initializeYearFilter = () => {
   if (availableYears.value.length > 0) {
-    // Select the last two years by default
     selectedYears.value = availableYears.value.slice(0, 2);
   }
 };
@@ -178,13 +251,13 @@ const subscriptionCategories = [
 ];
 
 const colorPalette = [
-  "#1a519b", // Main blue
-  "#999999", // Main grey
-  "#3a71bb", // Lighter blue 1
-  "#b3b3b3", // Lighter grey 1
-  "#5a91db", // Lighter blue 2
-  "#cccccc", // Lighter grey 2
-  "#7ab1fb", // Lightest blue
+  "#1a519b",
+  "#999999",
+  "#3a71bb",
+  "#b3b3b3",
+  "#5a91db",
+  "#cccccc",
+  "#7ab1fb",
 ];
 
 const isRelevantSubscription = (subscription: string): boolean => {
@@ -208,6 +281,31 @@ const getSubscriptionType = (subscription: string): string => {
   if (subscriptionLower.includes("mitarbeiter")) return "Mitarbeiter";
   if (subscriptionLower.includes("kinder")) return "Kinder";
   return "Other";
+};
+
+const getSubscriptionPrice = (subscription: string): number => {
+  if (subscription.toLowerCase().includes("mma")) {
+    return 1440;
+  }
+  if (subscription.toLowerCase().includes("striking")) {
+    return 1145;
+  }
+  if (subscription.toLowerCase().includes("grappling")) {
+    return 995;
+  }
+  if (
+    subscription.toLowerCase().includes("fit") ||
+    subscription.toLowerCase().includes("athletik")
+  ) {
+    return 995;
+  }
+  if (
+    subscription.toLowerCase().includes("kinder") &&
+    !subscription.toLowerCase().includes("Probetraining")
+  ) {
+    return 720;
+  }
+  return 0;
 };
 
 const totalCustomers = computed(() => {
@@ -263,6 +361,98 @@ const subscriptionBarData = computed(() => ({
   ],
 }));
 
+const allSubscriptionsRevenueData = computed(() => {
+  if (filteredDatasets.value.length === 0)
+    return { labels: [], datasets: [{ data: [] }] };
+
+  const latestDataset =
+    filteredDatasets.value[filteredDatasets.value.length - 1];
+  const subscriptionCounts = new Map<
+    string,
+    { count: number; revenue: number }
+  >();
+
+  latestDataset.customers.forEach((customer) => {
+    const subscription = customer.subscription;
+    const price = getSubscriptionPrice(subscription);
+
+    if (!subscriptionCounts.has(subscription)) {
+      subscriptionCounts.set(subscription, { count: 0, revenue: 0 });
+    }
+
+    const current = subscriptionCounts.get(subscription)!;
+    current.count += 1;
+    current.revenue += price;
+  });
+
+  const labels = Array.from(subscriptionCounts.keys());
+  const data = Array.from(subscriptionCounts.values()).map((v) => v.revenue);
+  const backgroundColor = labels.map(
+    (_, i) => colorPalette[i % colorPalette.length]
+  );
+
+  return {
+    labels: labels.map(
+      (label) => `${label} (${subscriptionCounts.get(label)?.count || 0}x)`
+    ),
+    datasets: [
+      {
+        data,
+        backgroundColor,
+      },
+    ],
+  };
+});
+
+const relevantTypesRevenueData = computed(() => {
+  if (filteredDatasets.value.length === 0)
+    return { labels: [], datasets: [{ data: [] }] };
+
+  const latestDataset =
+    filteredDatasets.value[filteredDatasets.value.length - 1];
+  const relevantTypes = [
+    "Striking",
+    "Grappling",
+    "MMA",
+    "Fit & Athletik",
+    "Kinder",
+  ];
+  const typeData = new Map<string, { count: number; revenue: number }>();
+
+  latestDataset.customers.forEach((customer) => {
+    const type = getSubscriptionType(customer.subscription);
+    if (relevantTypes.includes(type)) {
+      const price = getSubscriptionPrice(customer.subscription);
+
+      if (!typeData.has(type)) {
+        typeData.set(type, { count: 0, revenue: 0 });
+      }
+
+      const current = typeData.get(type)!;
+      current.count += 1;
+      current.revenue += price;
+    }
+  });
+
+  const labels = Array.from(typeData.keys());
+  const data = Array.from(typeData.values()).map((v) => v.revenue);
+  const backgroundColor = labels.map(
+    (_, i) => colorPalette[i % colorPalette.length]
+  );
+
+  return {
+    labels: labels.map(
+      (label) => `${label} (${typeData.get(label)?.count || 0}x)`
+    ),
+    datasets: [
+      {
+        data,
+        backgroundColor,
+      },
+    ],
+  };
+});
+
 const subscriptionGrowthData = computed(() => {
   if (filteredDatasets.value.length === 0) return { labels: [], datasets: [] };
 
@@ -301,6 +491,51 @@ const subscriptionGrowthData = computed(() => {
   return {
     labels,
     datasets: subscriptionData,
+  };
+});
+
+const probetrainingData = computed(() => {
+  if (filteredDatasets.value.length === 0) return { labels: [], datasets: [] };
+
+  const sortedDatasets = [...filteredDatasets.value].sort(
+    (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+  );
+
+  const labels = sortedDatasets.map((ds) => format(ds.timestamp, "MMM yyyy"));
+
+  const data = sortedDatasets.map((ds) => {
+    return ds.customers.filter((c) => {
+      const subscription = (c.subscription || "").toLowerCase().trim();
+
+      const isValid =
+        subscription.includes("probetraining") &&
+        c.validFrom !== null &&
+        isValidDate(c.validFrom);
+
+      if (subscription.includes("probetraining")) {
+        console.log("Trial Training Validation:", {
+          subscription,
+          rawValidFrom: c.validFrom,
+          isValidDate: isValidDate(c.validFrom),
+          isValid,
+        });
+      }
+
+      return isValid;
+    }).length;
+  });
+
+  return {
+    labels,
+    datasets: [
+      {
+        label: "Trial Training",
+        data,
+        borderColor: colorPalette[0],
+        backgroundColor: colorPalette[0],
+        tension: 0.4,
+      },
+    ],
   };
 });
 
@@ -455,6 +690,22 @@ const lineChartOptions = {
   },
 };
 
+const revenueChartOptions = {
+  ...chartOptions,
+  plugins: {
+    ...chartOptions.plugins,
+    tooltip: {
+      callbacks: {
+        label: (context: any) => {
+          const label = context.label || "";
+          const value = context.raw || 0;
+          return `${label}: CHF ${value.toLocaleString()}`;
+        },
+      },
+    },
+  },
+};
+
 const extractTimestampFromFilename = (filename: string): Date => {
   const match = filename.match(/(\d{12})/);
   if (!match) throw new Error("Invalid filename format");
@@ -483,28 +734,45 @@ const processFiles = async () => {
 
       const rawData = XLSX.utils.sheet_to_json(worksheet);
 
-      const customers = rawData.map((row: any) => ({
-        id: row.ID || "",
-        subscription: row.Abonnement || row.Subscription || "",
-        validFrom: new Date(row.ValidFrom || ""),
-        validUntil: new Date(row.ValidUntil || ""),
-        pendingBookings: parseInt(row.PendingBookings || "0"),
-        purchaseDate: new Date(row.PurchaseDate || ""),
-        subscriptionStatus: row.SubscriptionStatus || "",
-        customer: row.Customer || "",
-        salutation: row.Salutation || "",
-        firstName: row.FirstName || "",
-        lastName: row.LastName || "",
-        address: row.Address || "",
-        postalCode: row.PostalCode || "",
-        country: row.Country || "",
-        mobile: row.Mobile || "",
-        phonePrivate: row.PhonePrivate || "",
-        phoneWork: row.PhoneWork || "",
-        birthday: new Date(row.Birthday || ""),
-        email: row.Email || "",
-        language: row.Language || "",
-      }));
+      console.log("Raw Excel data sample:", rawData[0]);
+
+      const customers = rawData.map((row: any) => {
+        if ((row.Abonnement || "").toLowerCase().includes("probetraining")) {
+          console.log("Raw trial training row:", {
+            subscription: row.Abonnement,
+            validFrom: row["Gültig ab"],
+            validUntil: row["Gültig bis"],
+          });
+        }
+
+        const validFrom = parseExcelDate(row["Gültig ab"]);
+        const validUntil = parseExcelDate(row["Gültig bis"]);
+        const purchaseDate = parseExcelDate(row["Kaufdatum"]);
+        const birthday = parseExcelDate(row["Geburtstag"]);
+
+        return {
+          id: row.ID || "",
+          subscription: row.Abonnement || "",
+          validFrom,
+          validUntil,
+          pendingBookings: parseInt(row["Ausstehende Buchungen"] || "0"),
+          purchaseDate,
+          subscriptionStatus: row["Abonnement-Status"] || "",
+          customer: row.Kunde || "",
+          salutation: row.Anrede || "",
+          firstName: row.Vorname || "",
+          lastName: row.Name || "",
+          address: row.Adresse || "",
+          postalCode: row["PLZ / Stadt"] || "",
+          country: row.Land || "",
+          mobile: row.Mobiltelefon || "",
+          phonePrivate: row["Telefon Privat"] || "",
+          phoneWork: row["Telefon Arbeit"] || "",
+          birthday,
+          email: row["E-Mail"] || "",
+          language: row.Sprache || "",
+        };
+      });
 
       datasets.value.push({
         timestamp,
@@ -636,14 +904,15 @@ h3 {
 
 .charts-container {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
   gap: 20px;
   margin-bottom: 30px;
 }
 
 .chart {
   background: white;
-  padding: 55px;
+  padding: 30px;
+  padding-bottom: 65px;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   height: 400px;
