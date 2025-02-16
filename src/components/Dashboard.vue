@@ -98,6 +98,7 @@
                 'Grappling',
                 'Fit & Athletik',
                 'MMA',
+                'Kinder',
               ]"
               :key="type"
               @click="selectedTableFilter = type"
@@ -324,9 +325,8 @@ const subscriptionCategories = [
   "Grappling",
   "MMA",
   "Fit & Athletik",
-  "Pro",
-  "Mitarbeiter",
   "Kinder",
+  "Mitarbeiter",
 ];
 
 const colorPalette = [
@@ -395,6 +395,7 @@ const filteredDatasets = computed(() => {
 });
 
 const isRelevantSubscription = (subscription: string): boolean => {
+  if (subscription.toLowerCase().includes("probetraining")) return false;
   const type = getSubscriptionType(subscription);
   return ["Striking", "Grappling", "MMA", "Fit & Athletik", "Kinder"].includes(
     type
@@ -411,9 +412,12 @@ const getSubscriptionType = (subscription: string): string => {
     subscriptionLower.includes("athletik")
   )
     return "Fit & Athletik";
-  if (subscriptionLower.includes("pro")) return "Pro";
+  if (
+    subscriptionLower.includes("kinder") ||
+    subscriptionLower.includes("jugendliche")
+  )
+    return "Kinder";
   if (subscriptionLower.includes("mitarbeiter")) return "Mitarbeiter";
-  if (subscriptionLower.includes("kinder")) return "Kinder";
   return "Other";
 };
 
@@ -508,7 +512,9 @@ const subscriptionChartData = computed(() => {
 
   const data = subscriptionCategories.map((category) => {
     return latestDataset.customers.filter(
-      (c) => getSubscriptionType(c.subscription) === category
+      (c) =>
+        !c.subscription.toLowerCase().includes("probetraining") &&
+        getSubscriptionType(c.subscription) === category
     ).length;
   });
 
@@ -533,7 +539,9 @@ const subscriptionBarData = computed(() => ({
           ? filteredDatasets.value[
               filteredDatasets.value.length - 1
             ].customers.filter(
-              (c) => getSubscriptionType(c.subscription) === category
+              (c) =>
+                !c.subscription.toLowerCase().includes("probetraining") &&
+                getSubscriptionType(c.subscription) === category
             ).length
           : 0
       ),
@@ -555,6 +563,8 @@ const allSubscriptionsRevenueData = computed(() => {
 
   latestDataset.customers.forEach((customer) => {
     const subscription = customer.subscription;
+    if (subscription.toLowerCase().includes("probetraining")) return;
+
     const price = getSubscriptionPrice(subscription);
 
     if (!subscriptionCounts.has(subscription)) {
@@ -608,6 +618,8 @@ const relevantTypesRevenueData = computed(() => {
   });
 
   latestDataset.customers.forEach((customer) => {
+    if (customer.subscription.toLowerCase().includes("probetraining")) return;
+
     const subscription = customer.subscription;
     const price = getSubscriptionPrice(subscription);
 
@@ -657,7 +669,9 @@ const subscriptionGrowthData = computed(() => {
     data: sortedDatasets.map(
       (ds) =>
         ds.customers.filter(
-          (c) => getSubscriptionType(c.subscription) === category
+          (c) =>
+            !c.subscription.toLowerCase().includes("probetraining") &&
+            getSubscriptionType(c.subscription) === category
         ).length
     ),
     borderColor: colorPalette[index % colorPalette.length],
@@ -793,6 +807,8 @@ const filteredTableData = computed(() => {
 
   latestDataset.customers.forEach((customer) => {
     const subscription = customer.subscription;
+    if (subscription.toLowerCase().includes("probetraining")) return;
+
     const type = getSubscriptionType(subscription);
 
     // Skip if filtered and not matching the selected type
