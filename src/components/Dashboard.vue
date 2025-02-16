@@ -679,6 +679,24 @@ const subscriptionGrowthData = computed(() => {
     tension: 0.4,
   }));
 
+  // Add Pro subscriptions data
+  subscriptionData.push({
+    label: "Pro Subscriptions",
+    data: sortedDatasets.map(
+      (ds) =>
+        ds.customers.filter((c) => {
+          const subscriptionLower = c.subscription.toLowerCase();
+          return (
+            subscriptionLower.includes("pro") &&
+            !subscriptionLower.includes("probetraining")
+          );
+        }).length
+    ),
+    borderColor: "#ff4444",
+    backgroundColor: "#ff4444",
+    tension: 0.4,
+  });
+
   subscriptionData.push({
     label: "Total (Relevant Types Only)",
     data: sortedDatasets.map(
