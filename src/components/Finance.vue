@@ -51,6 +51,16 @@
             <p class="amount">CHF {{ formatNumber(totalAmount) }}</p>
           </div>
         </div>
+
+        <div class="chart-wrapper wide-chart">
+          <h3>Outstanding Invoices by Due Date</h3>
+          <div class="chart">
+            <Bar
+              :data="monthlyOutstandingData"
+              :options="monthlyChartOptions"
+            />
+          </div>
+        </div>
       </div>
     </main>
   </div>
@@ -58,15 +68,32 @@
 
 <script setup lang="ts">
 import { ref, computed } from "vue";
-import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
-import { Pie } from "vue-chartjs";
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip,
+  Legend,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+} from "chart.js";
+import { Pie, Bar } from "vue-chartjs";
 import * as XLSX from "xlsx";
+import { format, parse } from "date-fns";
 
-ChartJS.register(ArcElement, Tooltip, Legend);
+ChartJS.register(
+  ArcElement,
+  Tooltip,
+  Legend,
+  CategoryScale,
+  LinearScale,
+  BarElement
+);
 
 interface Invoice {
   rechnungsstatus: string;
   total: number;
+  zahlbarBis: Date | null;
 }
 
 const selectedFiles = ref<FileList | null>(null);
@@ -87,6 +114,32 @@ const formatNumber = (num: number): string => {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+};
+
+const parseExcelDate = (date: any): Date | null => {
+  if (!date) return null;
+
+  if (typeof date === "string") {
+    try {
+      const [day, month, year] = date.split(".");
+      if (day && month && year) {
+        const parsedDate = new Date(
+          parseInt(year),
+          parseInt(month) - 1,
+          parseInt(day)
+        );
+        return isValidDate(parsedDate) ? parsedDate : null;
+      }
+    } catch (e) {
+      console.log("Error parsing date:", e);
+    }
+  }
+
+  return null;
+};
+
+const isValidDate = (date: any): boolean => {
+  return date instanceof Date && !isNaN(date.getTime());
 };
 
 const extractStatus = (fullStatus: string): string => {
@@ -146,6 +199,38 @@ const invoiceStatusChartData = computed(() => {
   };
 });
 
+const monthlyOutstandingData = computed(() => {
+  const monthlyData = new Map<string, number>();
+
+  invoiceData.value.forEach((invoice) => {
+    if (invoice.zahlbarBis) {
+      const monthKey = format(invoice.zahlbarBis, "MMM yyyy");
+      monthlyData.set(
+        monthKey,
+        (monthlyData.get(monthKey) || 0) + invoice.total
+      );
+    }
+  });
+
+  // Sort by date
+  const sortedEntries = Array.from(monthlyData.entries()).sort((a, b) => {
+    const dateA = parse(a[0], "MMM yyyy", new Date());
+    const dateB = parse(b[0], "MMM yyyy", new Date());
+    return dateA.getTime() - dateB.getTime();
+  });
+
+  return {
+    labels: sortedEntries.map(([month]) => month),
+    datasets: [
+      {
+        label: "Outstanding Amount",
+        data: sortedEntries.map(([, amount]) => amount),
+        backgroundColor: "#1a519b",
+      },
+    ],
+  };
+});
+
 const chartOptions = {
   responsive: true,
   maintainAspectRatio: false,
@@ -181,6 +266,32 @@ const chartOptions = {
   },
 };
 
+const monthlyChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      display: false,
+    },
+    tooltip: {
+      callbacks: {
+        label: (context: any) => {
+          const value = context.raw || 0;
+          return `CHF ${formatNumber(value)}`;
+        },
+      },
+    },
+  },
+  scales: {
+    y: {
+      beginAtZero: true,
+      ticks: {
+        callback: (value: number) => `CHF ${formatNumber(value)}`,
+      },
+    },
+  },
+};
+
 const handleFileUpload = (event: Event) => {
   const input = event.target as HTMLInputElement;
   selectedFiles.value = input.files;
@@ -203,10 +314,16 @@ const processFiles = async () => {
 
       const rawData = XLSX.utils.sheet_to_json(worksheet);
 
-      const processedData = rawData.map((row: any) => ({
-        rechnungsstatus: row["Rechnungsstatus"] || "",
-        total: parseFloat(row["Total"] || 0),
-      }));
+      const processedData = rawData.map((row: any) => {
+        // Log the row data to see the actual column names
+        console.log("Raw row data:", row);
+
+        return {
+          rechnungsstatus: row["Rechnungsstatus"] || "",
+          total: parseFloat(row["Total"] || 0),
+          zahlbarBis: parseExcelDate(row["Zahlbar bis"]), // Updated column name
+        };
+      });
 
       invoiceData.value.push(...processedData);
     }
@@ -303,6 +420,14 @@ h1 {
   position: relative;
   margin: 0 auto;
   max-width: 800px;
+}
+
+.wide-chart {
+  grid-column: 1 / -1;
+}
+
+.wide-chart .chart {
+  max-width: 100%;
 }
 
 .stats-container {
