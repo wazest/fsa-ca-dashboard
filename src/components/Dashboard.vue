@@ -632,6 +632,12 @@ const relevantTypesRevenueData = computed(() => {
     });
   });
 
+  // Gesamtumsatz berechnen
+  const totalRevenue = Array.from(typeData.values()).reduce(
+    (sum, t) => sum + t.revenue,
+    0
+  );
+
   const sortedEntries = Array.from(typeData.entries()).sort(
     (a, b) => b[1].revenue - a[1].revenue
   );
@@ -642,12 +648,16 @@ const relevantTypesRevenueData = computed(() => {
     (_, i) => colorPalette[i % colorPalette.length]
   );
 
+  // Prozentwerte berechnen
+  const percentages = sortedEntries.map(
+    ([, value]) => ((value.revenue / totalRevenue) * 100).toFixed(2) + "%"
+  );
+
   return {
-    labels: labels.map(
-      (label) => `${label} (${typeData.get(label)?.count || 0}x)`
-    ),
+    labels: labels.map((label, i) => `${label} (${percentages[i]})`),
     datasets: [
       {
+        label: "Revenue (CHF)",
         data,
         backgroundColor,
       },
