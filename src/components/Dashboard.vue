@@ -99,6 +99,7 @@
                 'Fit & Athletik',
                 'MMA',
                 'Kinder',
+                'Pro Abos',
               ]"
               :key="type"
               @click="selectedTableFilter = type"
@@ -117,6 +118,9 @@
                 <th>Count</th>
                 <th>Price (CHF)</th>
                 <th>Total Revenue (CHF)</th>
+                <th v-if="selectedTableFilter === 'Pro Abos'">
+                  Pro Revenue (CHF)
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -125,12 +129,18 @@
                 <td>{{ row.count }}</td>
                 <td>{{ row.price.toLocaleString() }}</td>
                 <td>{{ row.revenue.toLocaleString() }}</td>
+                <td v-if="selectedTableFilter === 'Pro Abos'">
+                  {{ row.proRevenue.toLocaleString() }}
+                </td>
               </tr>
               <tr class="total-row">
                 <td>Total</td>
                 <td>{{ totalCount }}</td>
                 <td>-</td>
                 <td>{{ totalRevenue.toLocaleString() }}</td>
+                <td v-if="selectedTableFilter === 'Pro Abos'">
+                  {{ totalProRevenue.toLocaleString() }}
+                </td>
               </tr>
             </tbody>
           </table>
@@ -830,7 +840,7 @@ const filteredTableData = computed(() => {
     filteredDatasets.value[filteredDatasets.value.length - 1];
   const subscriptionData = new Map<
     string,
-    { count: number; price: number; revenue: number }
+    { count: number; price: number; revenue: number; proRevenue: number }
   >();
 
   latestDataset.customers.forEach((customer) => {
@@ -839,23 +849,49 @@ const filteredTableData = computed(() => {
 
     const type = getSubscriptionType(subscription);
 
-    // Skip if filtered and not matching the selected type
+    const isProAbo =
+      subscription.toLowerCase().includes("pro") &&
+      !subscription.toLowerCase().includes("probetraining") &&
+      (subscription.toLowerCase().includes("striking") ||
+        subscription.toLowerCase().includes("grappling") ||
+        subscription.toLowerCase().includes("mma"));
+
+    // Überprüfen, ob der Filter "Pro Abos" aktiv ist
+    if (selectedTableFilter.value === "Pro Abos" && !isProAbo) return;
     if (
       selectedTableFilter.value !== "All" &&
+      selectedTableFilter.value !== "Pro Abos" &&
       type !== selectedTableFilter.value
     ) {
       return;
     }
 
     const price = getSubscriptionPrice(subscription);
+    let proRevenue = 0;
+
+    if (selectedTableFilter.value === "Pro Abos") {
+      if (subscription.toLowerCase().includes("6 monate")) {
+        proRevenue =
+          250 * ((subscriptionData.get(subscription)?.count ?? 0 + 1) + 1);
+      } else if (subscription.toLowerCase().includes("1 jahr")) {
+        proRevenue =
+          395 * ((subscriptionData.get(subscription)?.count ?? 0 + 1) + 1);
+      }
+    }
 
     if (!subscriptionData.has(subscription)) {
-      subscriptionData.set(subscription, { count: 0, price, revenue: 0 });
+      subscriptionData.set(subscription, {
+        count: 0,
+        price,
+        revenue: 0,
+        proRevenue: 0,
+      });
     }
 
     const data = subscriptionData.get(subscription)!;
     data.count += 1;
     data.revenue = data.count * data.price;
+    data.proRevenue = proRevenue;
   });
 
   return Array.from(subscriptionData.entries())
@@ -872,6 +908,11 @@ const totalCount = computed(() => {
 
 const totalRevenue = computed(() => {
   return filteredTableData.value.reduce((sum, row) => sum + row.revenue, 0);
+});
+
+// Berechnung der Gesamtsumme für Pro Revenue
+const totalProRevenue = computed(() => {
+  return filteredTableData.value.reduce((sum, row) => sum + row.proRevenue, 0);
 });
 
 const chartOptions = {
