@@ -2,6 +2,7 @@
   <nav class="navigation">
     <router-link to="/" class="nav-link">Dashboard</router-link>
     <router-link to="/finance" class="nav-link">Finance</router-link>
+    <router-link to="/bookings" class="nav-link">Bookings</router-link>
   </nav>
   <router-view />
 </template>
