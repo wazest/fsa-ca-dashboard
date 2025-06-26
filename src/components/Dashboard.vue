@@ -88,6 +88,11 @@
           </div>
         </div>
 
+        <div v-if="filteredDatasets.length > 0" class="chart wide-chart">
+          <h3>Renewal Forecast</h3>
+          <Bar :data="renewalForecastData" :options="barChartOptions" />
+        </div>
+
         <div v-if="filteredDatasets.length > 0" class="subscription-table">
           <h3>Subscription Revenue Overview</h3>
           <div class="table-filters">
@@ -828,6 +833,50 @@ const specialTrainingData = computed(() => {
         borderColor: "#7ab1fb",
         backgroundColor: "#7ab1fb",
         tension: 0.4,
+      },
+    ],
+  };
+});
+
+const renewalForecastData = computed(() => {
+  if (filteredDatasets.value.length === 0) return { labels: [], datasets: [] };
+
+  const latestDataset =
+    filteredDatasets.value[filteredDatasets.value.length - 1];
+  const renewalMap = new Map<string, number>();
+
+  latestDataset.customers.forEach((c) => {
+    const validUntil = c.validUntil;
+    const status = (c.subscriptionStatus || "").toLowerCase();
+    const name = (c.subscription || "").toLowerCase();
+
+    if (!isValidDate(validUntil)) return;
+    if (status === "gekündigt") return;
+
+    // ✅ Nur 1 Jahr oder 6 Monate erlauben
+    const isRelevant = name.includes("1 jahr") || name.includes("6 monate");
+    if (!isRelevant) return;
+
+    const label = format(validUntil, "MMM yyyy");
+
+    if (!renewalMap.has(label)) renewalMap.set(label, 0);
+    renewalMap.set(label, renewalMap.get(label)! + 1);
+  });
+
+  const sortedEntries = Array.from(renewalMap.entries()).sort(
+    ([a], [b]) => new Date(a).getTime() - new Date(b).getTime()
+  );
+
+  const labels = sortedEntries.map(([label]) => label);
+  const data = sortedEntries.map(([, count]) => count);
+
+  return {
+    labels,
+    datasets: [
+      {
+        label: "Renewals",
+        data,
+        backgroundColor: "#1a519b",
       },
     ],
   };
