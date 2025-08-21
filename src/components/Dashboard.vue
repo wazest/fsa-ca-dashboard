@@ -86,11 +86,24 @@
             <h3>Special Training Packages</h3>
             <Line :data="specialTrainingData" :options="lineChartOptions" />
           </div>
-        </div>
 
-        <div v-if="filteredDatasets.length > 0" class="chart wide-chart">
-          <h3>Renewal Forecast</h3>
-          <Bar :data="renewalForecastData" :options="barChartOptions" />
+          <div v-if="filteredDatasets.length > 0" class="chart wide-chart">
+            <h3>Renewal Forecast</h3>
+            <Bar :data="renewalForecastData" :options="barChartOptions" />
+          </div>
+
+          <div v-if="filteredDatasets.length > 0" class="chart wide-chart">
+            <h3>Kündigungen nach Monat (gemäss Kündigungsdatum)</h3>
+            <Bar :data="cancellationsByMonth" :options="barChartOptions" />
+          </div>
+
+          <div v-if="filteredDatasets.length > 0" class="chart wide-chart">
+            <h3>Auslaufende gekündigte Abos (gemäss Gültig bis)</h3>
+            <Bar
+              :data="cancellationsExpiringByMonth"
+              :options="barChartOptions"
+            />
+          </div>
         </div>
 
         <div v-if="filteredDatasets.length > 0" class="subscription-table">
@@ -877,6 +890,78 @@ const renewalForecastData = computed(() => {
         label: "Renewals",
         data,
         backgroundColor: "#1a519b",
+      },
+    ],
+  };
+});
+
+const cancellationsByMonth = computed(() => {
+  const cancellationMap = new Map<string, number>();
+
+  filteredDatasets.value.forEach((ds) => {
+    ds.customers.forEach((c) => {
+      const subscription = c.subscription || "";
+      const status = c.subscriptionStatus?.toLowerCase() || "";
+
+      if (!isRelevantSubscription(subscription)) return;
+
+      const match = status.match(/gekündigt am (\d{2})\.(\d{2})\.(\d{4})/);
+      if (match) {
+        const [_, day, month, year] = match;
+        const date = new Date(`${year}-${month}-${day}`);
+        if (isValidDate(date)) {
+          const label = format(date, "MMM yyyy");
+          cancellationMap.set(label, (cancellationMap.get(label) || 0) + 1);
+        }
+      }
+    });
+  });
+
+  const sortedEntries = Array.from(cancellationMap.entries()).sort(
+    ([a], [b]) => new Date(a).getTime() - new Date(b).getTime()
+  );
+
+  return {
+    labels: sortedEntries.map(([label]) => label),
+    datasets: [
+      {
+        label: "Kündigungen (erfasst)",
+        data: sortedEntries.map(([, count]) => count),
+        backgroundColor: "#b30000",
+      },
+    ],
+  };
+});
+
+const cancellationsExpiringByMonth = computed(() => {
+  const expirationMap = new Map<string, number>();
+
+  filteredDatasets.value.forEach((ds) => {
+    ds.customers.forEach((c) => {
+      const subscription = c.subscription || "";
+      const status = c.subscriptionStatus?.toLowerCase() || "";
+      const validUntil = c.validUntil;
+
+      if (!isRelevantSubscription(subscription)) return;
+      if (!status.includes("gekündigt")) return;
+      if (!isValidDate(validUntil)) return;
+
+      const label = format(validUntil, "MMM yyyy");
+      expirationMap.set(label, (expirationMap.get(label) || 0) + 1);
+    });
+  });
+
+  const sortedEntries = Array.from(expirationMap.entries()).sort(
+    ([a], [b]) => new Date(a).getTime() - new Date(b).getTime()
+  );
+
+  return {
+    labels: sortedEntries.map(([label]) => label),
+    datasets: [
+      {
+        label: "Auslaufende gekündigte Abos",
+        data: sortedEntries.map(([, count]) => count),
+        backgroundColor: "#e67300",
       },
     ],
   };
