@@ -83,6 +83,11 @@
             <Line :data="probetrainingData" :options="lineChartOptions" />
           </div>
           <div class="chart wide-chart">
+            <h3>Monthly Conversions by Type</h3>
+            <Bar :data="conversionChartData" :options="barChartOptions" />
+          </div>
+
+          <div class="chart wide-chart">
             <h3>Special Training Packages</h3>
             <Line :data="specialTrainingData" :options="lineChartOptions" />
           </div>
@@ -106,6 +111,7 @@
                 'Grappling',
                 'Fit & Athletik',
                 'MMA',
+                'Kinder',
               ]"
               :key="type"
               @click="selectedCancellationFilter = type"
@@ -820,6 +826,78 @@ const probetrainingData = computed(() => {
   };
 });
 
+const conversionChartData = computed(() => {
+  if (filteredDatasets.value.length === 0) return { labels: [], datasets: [] };
+
+  const relevantTypes = ["Striking", "Grappling", "MMA", "Kinder"];
+  const customerTypeHistory = new Map<string, Map<string, Date>>(); // Map<email, Map<type, firstDate>>
+
+  // Schritt 1: Durch alle Kunden iterieren und für jeden Typ den frühesten validFrom speichern
+  for (const dataset of filteredDatasets.value) {
+    for (const customer of dataset.customers) {
+      const email = customer.email || customer.name; // Fallback falls keine E-Mail
+      const type = getSubscriptionType(customer.subscription || "");
+      const validFrom = customer.validFrom;
+
+      if (!relevantTypes.includes(type)) continue;
+      if (!(validFrom instanceof Date) || isNaN(validFrom.getTime())) continue;
+
+      if (!customerTypeHistory.has(email)) {
+        customerTypeHistory.set(email, new Map());
+      }
+
+      const typeHistory = customerTypeHistory.get(email)!;
+
+      if (!typeHistory.has(type) || validFrom < typeHistory.get(type)!) {
+        typeHistory.set(type, validFrom);
+      }
+    }
+  }
+
+  // Schritt 2: Für jede Conversion eintragen, in welchem Monat sie passiert ist
+  const conversionMap = new Map<string, Map<string, number>>(); // Map<"MMM yyyy", Map<type, count>>
+
+  for (const [email, typeMap] of customerTypeHistory.entries()) {
+    for (const [type, date] of typeMap.entries()) {
+      const year = date.getFullYear();
+      if (!selectedYears.value.includes(year)) continue;
+
+      const label = format(date, "MMM yyyy");
+
+      if (!conversionMap.has(label)) {
+        conversionMap.set(label, new Map());
+      }
+
+      const typeCountMap = conversionMap.get(label)!;
+      typeCountMap.set(type, (typeCountMap.get(type) || 0) + 1);
+    }
+  }
+
+  // Schritt 3: Labels sortieren
+  const sortedLabels = Array.from(conversionMap.keys()).sort(
+    (a, b) => new Date(a).getTime() - new Date(b).getTime()
+  );
+
+  // Schritt 4: Daten für jedes Typ-Label kombinieren
+  const datasets = relevantTypes.map((type, index) => {
+    const data = sortedLabels.map((label) => {
+      const map = conversionMap.get(label);
+      return map?.get(type) || 0;
+    });
+
+    return {
+      label: type,
+      data,
+      backgroundColor: colorPalette[index % colorPalette.length],
+    };
+  });
+
+  return {
+    labels: sortedLabels,
+    datasets,
+  };
+});
+
 const specialTrainingData = computed(() => {
   if (filteredDatasets.value.length === 0) return { labels: [], datasets: [] };
 
@@ -935,7 +1013,7 @@ const cancellationsByMonth = computed(() => {
 
       const subscriptionType = getSubscriptionType(subscription);
       if (
-        !["Striking", "Grappling", "Fit & Athletik", "MMA"].includes(
+        !["Striking", "Grappling", "Fit & Athletik", "MMA", "Kinder"].includes(
           subscriptionType
         )
       )
@@ -991,7 +1069,7 @@ const cancellationsExpiringByMonth = computed(() => {
 
       const subscriptionType = getSubscriptionType(subscription);
       if (
-        !["Striking", "Grappling", "Fit & Athletik", "MMA"].includes(
+        !["Striking", "Grappling", "Fit & Athletik", "MMA", "Kinder"].includes(
           subscriptionType
         )
       )
