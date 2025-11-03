@@ -207,6 +207,16 @@ const matchesFilter = (className: string): boolean => {
   return false;
 };
 
+const getClassType = (className: string): FilterType => {
+  const lower = className.toLowerCase();
+  if (lower.includes("kickbox") || lower.includes("fitbox"))
+    return "kickboxing";
+  if (lower.includes("bjj") || lower.includes("brazilian")) return "bjj";
+  if (lower.includes("athletik") || lower.includes("athletic"))
+    return "athletik";
+  return "all";
+};
+
 const filteredClassAverages = computed(() => {
   return classAverages.value.filter((cls) => matchesFilter(cls.className));
 });
@@ -235,39 +245,44 @@ const highestAverageBookings = computed(() => {
 const classAverages = computed(() => {
   if (bookingData.value.length === 0) return [];
 
-  // Group by class name and weekday
-  const classMap = new Map<string, ClassAverage>();
+  const classMap = new Map<string, ClassAverage & { names: Set<string> }>();
 
-  bookingData.value.forEach((booking) => {
-    const key = `${booking.weekday}-${booking.className}-${booking.time}`;
+  bookingData.value
+    .filter((booking) => matchesFilter(booking.className))
+    .forEach((booking) => {
+      const classType = getClassType(booking.className);
+      const key = `${classType}-${booking.weekday}-${booking.time}`;
 
-    if (!classMap.has(key)) {
-      classMap.set(key, {
-        className: booking.className,
-        weekday: booking.weekday,
-        time: booking.time,
-        averageAttendance: booking.averageAttendance,
-      });
-    }
-  });
+      if (!classMap.has(key)) {
+        classMap.set(key, {
+          className: booking.className,
+          weekday: booking.weekday,
+          time: booking.time,
+          averageAttendance: booking.averageAttendance,
+          names: new Set([booking.className]),
+        });
+      } else {
+        const entry = classMap.get(key)!;
+        entry.averageAttendance += booking.averageAttendance;
+        entry.names.add(booking.className);
+      }
+    });
 
-  // Convert to array and sort by weekday and then by class name
-  return Array.from(classMap.values()).sort((a, b) => {
-    const weekdayA = weekdayOrder[weekdayMap[a.weekday] || a.weekday] || 0;
-    const weekdayB = weekdayOrder[weekdayMap[b.weekday] || b.weekday] || 0;
+  return Array.from(classMap.values())
+    .map((entry) => ({
+      className: Array.from(entry.names).join(" + "),
+      weekday: entry.weekday,
+      time: entry.time,
+      averageAttendance: entry.averageAttendance,
+    }))
+    .sort((a, b) => {
+      const weekdayA = weekdayOrder[weekdayMap[a.weekday] || a.weekday] || 0;
+      const weekdayB = weekdayOrder[weekdayMap[b.weekday] || b.weekday] || 0;
 
-    if (weekdayA !== weekdayB) {
-      return weekdayA - weekdayB;
-    }
-
-    // If same weekday, sort by time
-    if (a.time !== b.time) {
-      return a.time.localeCompare(b.time);
-    }
-
-    // If same time, sort by class name
-    return a.className.localeCompare(b.className);
-  });
+      if (weekdayA !== weekdayB) return weekdayA - weekdayB;
+      if (a.time !== b.time) return a.time.localeCompare(b.time);
+      return a.className.localeCompare(b.className);
+    });
 });
 
 const averageBookingsChartData = computed(() => {
