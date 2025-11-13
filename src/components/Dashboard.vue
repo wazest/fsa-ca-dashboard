@@ -132,7 +132,9 @@
           </div>
 
           <div v-if="filteredDatasets.length > 0" class="chart wide-chart">
-            <h3>Auslaufende gekündigte Abos (gemäss Gültig bis)</h3>
+            <h3>
+              Auslaufende gekündigte Abos (gemäss Gültig bis, kein Folgeabo)
+            </h3>
             <Bar
               :data="cancellationsExpiringByMonth"
               :options="barChartOptions"
@@ -264,6 +266,14 @@ interface SubscriptionPrice {
   name: string;
   price: number;
 }
+
+const relevantTypes = [
+  "Striking",
+  "Grappling",
+  "MMA",
+  "Fit & Athletik",
+  "Kinder",
+];
 
 const subscriptionPrices: SubscriptionPrice[] = [
   { name: "Mitarbeiter", price: 0 },
@@ -668,13 +678,6 @@ const relevantTypesRevenueData = computed(() => {
 
   const latestDataset =
     filteredDatasets.value[filteredDatasets.value.length - 1];
-  const relevantTypes = [
-    "Striking",
-    "Grappling",
-    "MMA",
-    "Fit & Athletik",
-    "Kinder",
-  ];
   const typeData = new Map<string, { count: number; revenue: number }>();
 
   relevantTypes.forEach((type) => {
@@ -1061,33 +1064,60 @@ const cancellationsByMonth = computed(() => {
 const cancellationsExpiringByMonth = computed(() => {
   const expiryMap = new Map<string, number>();
 
+  // Step 1: Indexiere alle Abos pro Kunde
+  const futureSubscriptions = new Map<string, Date[]>();
+
+  for (const dataset of filteredDatasets.value) {
+    for (const customer of dataset.customers) {
+      const email = customer.email || customer.name;
+      const type = getSubscriptionType(customer.subscription || "");
+      const validFrom = customer.validFrom;
+
+      if (!relevantTypes.includes(type)) continue;
+      if (!isValidDate(validFrom)) continue;
+
+      const key = `${email}-${type}`;
+
+      if (!futureSubscriptions.has(key)) {
+        futureSubscriptions.set(key, []);
+      }
+      futureSubscriptions.get(key)!.push(validFrom);
+    }
+  }
+
+  // Step 2: Sortiere alle Dates
+  for (const [_, dates] of futureSubscriptions) {
+    dates.sort((a, b) => a.getTime() - b.getTime());
+  }
+
+  // Step 3: Prüfe Kündigungen
   for (const dataset of filteredDatasets.value) {
     for (const customer of dataset.customers) {
       const status = (customer.subscriptionStatus || "").toLowerCase();
       const subscription = customer.subscription || "";
       const validUntil = customer.validUntil;
+      const type = getSubscriptionType(subscription);
+      const email = customer.email || customer.name;
 
-      const subscriptionType = getSubscriptionType(subscription);
-      if (
-        !["Striking", "Grappling", "Fit & Athletik", "MMA", "Kinder"].includes(
-          subscriptionType
-        )
-      )
-        continue;
-
+      if (!relevantTypes.includes(type)) continue;
       if (
         selectedCancellationFilter.value !== "All" &&
-        subscriptionType !== selectedCancellationFilter.value
+        type !== selectedCancellationFilter.value
       )
         continue;
 
       const isCancelled = status.includes("gekündigt am");
       if (!isCancelled || !isValidDate(validUntil)) continue;
 
-      const label = format(validUntil!, "MMM yyyy");
+      const key = `${email}-${type}`;
+      const futureStarts = futureSubscriptions.get(key) || [];
 
-      if (!expiryMap.has(label)) expiryMap.set(label, 0);
-      expiryMap.set(label, expiryMap.get(label)! + 1);
+      const hasFollowUp = futureStarts.some((start) => start > validUntil);
+      if (!hasFollowUp) {
+        const label = format(validUntil, "MMM yyyy");
+        if (!expiryMap.has(label)) expiryMap.set(label, 0);
+        expiryMap.set(label, expiryMap.get(label)! + 1);
+      }
     }
   }
 
@@ -1099,9 +1129,9 @@ const cancellationsExpiringByMonth = computed(() => {
     labels: sortedEntries.map(([label]) => label),
     datasets: [
       {
-        label: "Kündigungen (Ablaufdatum)",
+        label: "Kündigungen (Ablaufdatum, ohne neues Abo)",
         data: sortedEntries.map(([, count]) => count),
-        backgroundColor: "#ffa500", // Orange für Unterscheidung
+        backgroundColor: "#ffa500",
       },
     ],
   };
@@ -1231,6 +1261,32 @@ const barChartOptions = {
       },
       ticks: {
         color: "#1a519b",
+      },
+    },
+  },
+};
+
+const stackedChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      display: true,
+    },
+    tooltip: {
+      mode: "index",
+      intersect: false,
+    },
+  },
+  scales: {
+    x: {
+      stacked: true,
+    },
+    y: {
+      stacked: true,
+      beginAtZero: true,
+      ticks: {
+        stepSize: 1,
       },
     },
   },
