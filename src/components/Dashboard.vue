@@ -68,16 +68,28 @@
             <Bar :data="subscriptionBarData" :options="barChartOptions" />
           </div>
           <div class="chart">
-            <h3>All Subscriptions Revenue</h3>
-            <Bar
-              :data="allSubscriptionsRevenueData"
+            <h3>Relevant Types Revenue</h3>
+            <Pie
+              :data="relevantTypesRevenueData"
               :options="revenueChartOptions"
             />
           </div>
           <div class="chart">
-            <h3>Relevant Types Revenue</h3>
-            <Pie
-              :data="relevantTypesRevenueData"
+            <h3>Subscription Duration Distribution</h3>
+            <Pie :data="subscriptionDurationData" :options="chartOptions" />
+          </div>
+          <div class="chart">
+            <h3>Revenue per Customer</h3>
+            <Bar :data="revenuePerCustomerData" :options="barChartOptions" />
+          </div>
+          <div class="chart">
+            <h3>Upgrade Funnel: Normal vs Pro</h3>
+            <Bar :data="upgradeFunnelData" :options="stackedChartOptions" />
+          </div>
+          <div class="chart wide-chart">
+            <h3>Current Subscriptions Revenue</h3>
+            <Bar
+              :data="allSubscriptionsRevenueData"
               :options="revenueChartOptions"
             />
           </div>
@@ -855,6 +867,73 @@ const relevantTypesRevenueData = computed(() => {
   };
 });
 
+const getSubscriptionDuration = (subscription: string): string => {
+  const lower = subscription.toLowerCase();
+
+  if (lower.includes("1 jahr")) return "1 Jahr";
+  if (lower.includes("6 monate")) return "6 Monate";
+  if (lower.includes("monatlich")) return "Monatlich";
+  if (lower.includes("week pass")) return "Week Pass";
+  if (lower.includes("day pass")) return "Day Pass";
+  if (lower.includes("personal training")) return "Personal Training";
+  if (lower.includes("nutrition")) return "Nutrition";
+  if (lower.includes("probetraining")) return "Probetraining";
+
+  return "Other";
+};
+
+const subscriptionDurationData = computed(() => {
+  if (filteredDatasets.value.length === 0)
+    return { labels: [], datasets: [{ data: [] }] };
+
+  const latestDataset =
+    filteredDatasets.value[filteredDatasets.value.length - 1];
+
+  const durationMap = new Map<string, number>();
+
+  latestDataset.customers.forEach((customer) => {
+    const subscription = customer.subscription || "";
+
+    if (!subscription) return;
+    if (subscription.toLowerCase().includes("probetraining")) return;
+
+    const duration = getSubscriptionDuration(subscription);
+
+    if (!durationMap.has(duration)) {
+      durationMap.set(duration, 0);
+    }
+
+    durationMap.set(duration, durationMap.get(duration)! + 1);
+  });
+
+  const preferredOrder = [
+    "1 Jahr",
+    "6 Monate",
+    "Monatlich",
+    "Week Pass",
+    "Day Pass",
+    "Personal Training",
+    "Nutrition",
+    "Other",
+  ];
+
+  const sortedEntries = Array.from(durationMap.entries()).sort(
+    ([a], [b]) => preferredOrder.indexOf(a) - preferredOrder.indexOf(b),
+  );
+
+  return {
+    labels: sortedEntries.map(([label]) => label),
+    datasets: [
+      {
+        data: sortedEntries.map(([, count]) => count),
+        backgroundColor: sortedEntries.map(
+          (_, i) => colorPalette[i % colorPalette.length],
+        ),
+      },
+    ],
+  };
+});
+
 const subscriptionGrowthData = computed(() => {
   if (filteredDatasets.value.length === 0) return { labels: [], datasets: [] };
 
@@ -913,6 +992,143 @@ const subscriptionGrowthData = computed(() => {
   return {
     labels,
     datasets: subscriptionData,
+  };
+});
+
+const revenuePerCustomerData = computed(() => {
+  if (filteredDatasets.value.length === 0)
+    return { labels: [], datasets: [{ data: [] }] };
+
+  const latestDataset =
+    filteredDatasets.value[filteredDatasets.value.length - 1];
+
+  const typeData = new Map<
+    string,
+    { customers: number; revenue: number; revenuePerCustomer: number }
+  >();
+
+  relevantTypes.forEach((type) => {
+    typeData.set(type, {
+      customers: 0,
+      revenue: 0,
+      revenuePerCustomer: 0,
+    });
+  });
+
+  latestDataset.customers.forEach((customer) => {
+    const subscription = customer.subscription || "";
+
+    if (subscription.toLowerCase().includes("probetraining")) return;
+
+    const type = getSubscriptionType(subscription);
+
+    if (!relevantTypes.includes(type)) return;
+
+    const current = typeData.get(type)!;
+
+    current.customers += 1;
+    current.revenue += getSubscriptionPrice(subscription);
+  });
+
+  const sortedEntries = Array.from(typeData.entries())
+    .map(([type, data]) => {
+      const revenuePerCustomer =
+        data.customers > 0 ? Math.round(data.revenue / data.customers) : 0;
+
+      return [
+        type,
+        {
+          ...data,
+          revenuePerCustomer,
+        },
+      ] as const;
+    })
+    .sort((a, b) => b[1].revenuePerCustomer - a[1].revenuePerCustomer);
+
+  return {
+    labels: sortedEntries.map(([type]) => type),
+    datasets: [
+      {
+        label: "CHF per Customer",
+        data: sortedEntries.map(([, data]) => data.revenuePerCustomer),
+        backgroundColor: sortedEntries.map(
+          (_, i) => colorPalette[i % colorPalette.length],
+        ),
+      },
+    ],
+  };
+});
+
+const upgradeFunnelData = computed(() => {
+  if (filteredDatasets.value.length === 0) return { labels: [], datasets: [] };
+
+  const latestDataset =
+    filteredDatasets.value[filteredDatasets.value.length - 1];
+
+  const upgradeTypes = ["Striking", "Grappling", "MMA"];
+
+  const funnelData = new Map<
+    string,
+    { normal: number; pro: number; total: number; proRate: number }
+  >();
+
+  upgradeTypes.forEach((type) => {
+    funnelData.set(type, {
+      normal: 0,
+      pro: 0,
+      total: 0,
+      proRate: 0,
+    });
+  });
+
+  latestDataset.customers.forEach((customer) => {
+    const subscription = customer.subscription || "";
+
+    if (subscription.toLowerCase().includes("probetraining")) return;
+
+    const type = getSubscriptionType(subscription);
+
+    if (!upgradeTypes.includes(type)) return;
+
+    const isPro = subscription.toLowerCase().includes("pro");
+    const current = funnelData.get(type)!;
+
+    if (isPro) {
+      current.pro += 1;
+    } else {
+      current.normal += 1;
+    }
+
+    current.total += 1;
+  });
+
+  const sortedEntries = Array.from(funnelData.entries()).map(([type, data]) => {
+    const proRate =
+      data.total > 0 ? Math.round((data.pro / data.total) * 1000) / 10 : 0;
+
+    return [
+      `${type} (${proRate}% Pro)`,
+      {
+        ...data,
+        proRate,
+      },
+    ] as const;
+  });
+
+  return {
+    labels: sortedEntries.map(([label]) => label),
+    datasets: [
+      {
+        label: "Normal",
+        data: sortedEntries.map(([, data]) => data.normal),
+        backgroundColor: "#999999",
+      },
+      {
+        label: "Pro",
+        data: sortedEntries.map(([, data]) => data.pro),
+        backgroundColor: "#1a519b",
+      },
+    ],
   };
 });
 
