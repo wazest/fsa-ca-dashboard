@@ -94,8 +94,42 @@
             />
           </div>
           <div class="chart wide-chart">
-            <h3>Subscription Growth Over Time</h3>
+            <div class="chart-header">
+              <h3>Subscription Growth Over Time</h3>
+
+              <label
+                class="switch-label"
+                :class="{ disabled: selectedYears.length !== 1 }"
+              >
+                <input
+                  type="checkbox"
+                  v-model="compareToPreviousYear"
+                  :disabled="selectedYears.length !== 1"
+                />
+                Compare to pre year
+              </label>
+            </div>
+
             <Line :data="subscriptionGrowthData" :options="lineChartOptions" />
+          </div>
+          <div class="chart wide-chart">
+            <div class="chart-header">
+              <h3>Special Training Packages</h3>
+
+              <label
+                class="switch-label"
+                :class="{ disabled: selectedYears.length !== 1 }"
+              >
+                <input
+                  type="checkbox"
+                  v-model="compareToPreviousYear"
+                  :disabled="selectedYears.length !== 1"
+                />
+                Compare to pre year
+              </label>
+            </div>
+
+            <Line :data="specialTrainingData" :options="lineChartOptions" />
           </div>
           <div class="chart wide-chart">
             <h3>Trial Training Overview</h3>
@@ -104,11 +138,6 @@
           <div class="chart wide-chart">
             <h3>Monthly Conversions by Type</h3>
             <Bar :data="conversionChartData" :options="barChartOptions" />
-          </div>
-
-          <div class="chart wide-chart">
-            <h3>Special Training Packages</h3>
-            <Line :data="specialTrainingData" :options="lineChartOptions" />
           </div>
           <div class="chart wide-chart">
             <h3>Renewal Forecast</h3>
@@ -521,6 +550,8 @@ const selectedFiles = ref<FileList | null>(null);
 const selectedYears = ref<number[]>([]);
 const selectedTableFilter = ref("All");
 const selectedPricing = ref<"2025" | "2026">("2026");
+const compareToPreviousYear = ref(false);
+const selectedCancellationFilter = ref("All");
 
 const subscriptionCategories = [
   "Striking",
@@ -540,8 +571,6 @@ const colorPalette = [
   "#cccccc",
   "#7ab1fb",
 ];
-
-const selectedCancellationFilter = ref("All");
 
 const isValidDate = (date: any): boolean => {
   return date instanceof Date && !isNaN(date.getTime()) && date.getTime() > 0;
@@ -602,6 +631,10 @@ const filteredDatasets = computed(() => {
   return datasets.value.filter((ds) =>
     selectedYears.value.includes(getYear(ds.timestamp)),
   );
+});
+
+const shouldCompareToPreviousYear = computed(() => {
+  return compareToPreviousYear.value && selectedYears.value.length === 1;
 });
 
 const isRelevantSubscription = (subscription: string): boolean => {
@@ -937,61 +970,171 @@ const subscriptionDurationData = computed(() => {
 const subscriptionGrowthData = computed(() => {
   if (filteredDatasets.value.length === 0) return { labels: [], datasets: [] };
 
-  const sortedDatasets = [...filteredDatasets.value].sort(
-    (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
-  );
+  // Normal mode: exactly like before
+  if (!shouldCompareToPreviousYear.value) {
+    const sortedDatasets = [...filteredDatasets.value].sort(
+      (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
+    );
 
-  const labels = sortedDatasets.map((ds) => format(ds.timestamp, "MMM yyyy"));
+    const labels = sortedDatasets.map((ds) => format(ds.timestamp, "MMM yyyy"));
 
-  const subscriptionData = subscriptionCategories.map((category, index) => ({
-    label: category,
-    data: sortedDatasets.map(
+    const subscriptionData = subscriptionCategories.map((category, index) => ({
+      label: category,
+      data: sortedDatasets.map(
+        (ds) =>
+          ds.customers.filter(
+            (c) =>
+              !c.subscription.toLowerCase().includes("probetraining") &&
+              getSubscriptionType(c.subscription) === category,
+          ).length,
+      ),
+      borderColor: colorPalette[index % colorPalette.length],
+      backgroundColor: colorPalette[index % colorPalette.length],
+      tension: 0.4,
+    }));
+
+    subscriptionData.push({
+      label: "Pro Subscriptions",
+      data: sortedDatasets.map(
+        (ds) =>
+          ds.customers.filter((c) => {
+            const subscriptionLower = c.subscription.toLowerCase();
+            return (
+              subscriptionLower.includes("pro") &&
+              !subscriptionLower.includes("probetraining")
+            );
+          }).length,
+      ),
+      borderColor: "#ff4444",
+      backgroundColor: "#ff4444",
+      tension: 0.4,
+    });
+
+    subscriptionData.push({
+      label: "Total (Relevant Types Only)",
+      data: sortedDatasets.map(
+        (ds) =>
+          ds.customers.filter((c) => isRelevantSubscription(c.subscription))
+            .length,
+      ),
+      borderColor: "#1a519b",
+      backgroundColor: "#1a519b",
+      borderWidth: 3,
+      tension: 0.4,
+    });
+
+    return {
+      labels,
+      datasets: subscriptionData,
+    };
+  }
+
+  // Compare mode
+  const selectedYear = selectedYears.value[0];
+  const previousYear = selectedYear - 1;
+
+  const compareDatasets = datasets.value
+    .filter((ds) =>
+      [selectedYear, previousYear].includes(getYear(ds.timestamp)),
+    )
+    .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+  const monthLabels = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+
+  const getDatasetForMonth = (year: number, monthIndex: number) => {
+    return compareDatasets.find(
       (ds) =>
-        ds.customers.filter(
-          (c) =>
-            !c.subscription.toLowerCase().includes("probetraining") &&
-            getSubscriptionType(c.subscription) === category,
-        ).length,
-    ),
-    borderColor: colorPalette[index % colorPalette.length],
-    backgroundColor: colorPalette[index % colorPalette.length],
-    tension: 0.4,
-  }));
+        getYear(ds.timestamp) === year &&
+        ds.timestamp.getMonth() === monthIndex,
+    );
+  };
 
-  // Add Pro subscriptions data
-  subscriptionData.push({
-    label: "Pro Subscriptions",
-    data: sortedDatasets.map(
-      (ds) =>
-        ds.customers.filter((c) => {
+  const buildCompareDataset = (
+    year: number,
+    category: string,
+    color: string,
+    dashed = false,
+  ) => ({
+    label: `${category} ${year}`,
+    data: monthLabels.map((_, monthIndex) => {
+      const dataset = getDatasetForMonth(year, monthIndex);
+
+      if (!dataset) return null;
+
+      if (category === "Total") {
+        return dataset.customers.filter((c) =>
+          isRelevantSubscription(c.subscription),
+        ).length;
+      }
+
+      if (category === "Pro") {
+        return dataset.customers.filter((c) => {
           const subscriptionLower = c.subscription.toLowerCase();
           return (
             subscriptionLower.includes("pro") &&
             !subscriptionLower.includes("probetraining")
           );
-        }).length,
-    ),
-    borderColor: "#ff4444",
-    backgroundColor: "#ff4444",
+        }).length;
+      }
+
+      return dataset.customers.filter(
+        (c) =>
+          !c.subscription.toLowerCase().includes("probetraining") &&
+          getSubscriptionType(c.subscription) === category,
+      ).length;
+    }),
+    borderColor: color,
+    backgroundColor: color,
+    borderDash: dashed ? [6, 6] : [],
     tension: 0.4,
+    spanGaps: true,
   });
 
-  subscriptionData.push({
-    label: "Total (Relevant Types Only)",
-    data: sortedDatasets.map(
-      (ds) =>
-        ds.customers.filter((c) => isRelevantSubscription(c.subscription))
-          .length,
-    ),
-    borderColor: "#1a519b",
-    backgroundColor: "#1a519b",
-    borderWidth: 3,
-    tension: 0.4,
+  const chartDatasets: any[] = [];
+
+  subscriptionCategories.forEach((category, index) => {
+    chartDatasets.push(
+      buildCompareDataset(
+        selectedYear,
+        category,
+        colorPalette[index % colorPalette.length],
+      ),
+    );
+
+    chartDatasets.push(
+      buildCompareDataset(
+        previousYear,
+        category,
+        colorPalette[index % colorPalette.length],
+        true,
+      ),
+    );
   });
+
+  chartDatasets.push(buildCompareDataset(selectedYear, "Pro", "#ff4444"));
+  chartDatasets.push(buildCompareDataset(previousYear, "Pro", "#ff4444", true));
+
+  chartDatasets.push(buildCompareDataset(selectedYear, "Total", "#1a519b"));
+  chartDatasets.push(
+    buildCompareDataset(previousYear, "Total", "#1a519b", true),
+  );
 
   return {
-    labels,
-    datasets: subscriptionData,
+    labels: monthLabels,
+    datasets: chartDatasets,
   };
 });
 
@@ -1243,60 +1386,162 @@ const conversionChartData = computed(() => {
 const specialTrainingData = computed(() => {
   if (filteredDatasets.value.length === 0) return { labels: [], datasets: [] };
 
-  const sortedDatasets = [...filteredDatasets.value].sort(
-    (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
-  );
+  const countSpecialType = (
+    dataset: DataSet,
+    type: "athlete" | "personal" | "nutrition",
+  ) => {
+    return dataset.customers.filter((c) => {
+      const subscriptionLower = c.subscription.toLowerCase();
 
-  const labels = sortedDatasets.map((ds) => format(ds.timestamp, "MMM yyyy"));
+      if (type === "athlete") {
+        return (
+          subscriptionLower.includes("athlete") &&
+          subscriptionLower.includes("package")
+        );
+      }
+
+      if (type === "personal") {
+        return (
+          subscriptionLower.includes("personal") &&
+          subscriptionLower.includes("training")
+        );
+      }
+
+      if (type === "nutrition") {
+        return subscriptionLower.includes("nutrition");
+      }
+
+      return false;
+    }).length;
+  };
+
+  // Normal mode: exactly like before
+  if (!shouldCompareToPreviousYear.value) {
+    const sortedDatasets = [...filteredDatasets.value].sort(
+      (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
+    );
+
+    const labels = sortedDatasets.map((ds) => format(ds.timestamp, "MMM yyyy"));
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: "Athlete Packages",
+          data: sortedDatasets.map((ds) => countSpecialType(ds, "athlete")),
+          borderColor: "#1a519b",
+          backgroundColor: "#1a519b",
+          tension: 0.4,
+        },
+        {
+          label: "Personal Training",
+          data: sortedDatasets.map((ds) => countSpecialType(ds, "personal")),
+          borderColor: "#5a91db",
+          backgroundColor: "#5a91db",
+          tension: 0.4,
+        },
+        {
+          label: "Nutrition",
+          data: sortedDatasets.map((ds) => countSpecialType(ds, "nutrition")),
+          borderColor: "#7ab1fb",
+          backgroundColor: "#7ab1fb",
+          tension: 0.4,
+        },
+      ],
+    };
+  }
+
+  // Compare mode
+  const selectedYear = selectedYears.value[0];
+  const previousYear = selectedYear - 1;
+
+  const compareDatasets = datasets.value
+    .filter((ds) =>
+      [selectedYear, previousYear].includes(getYear(ds.timestamp)),
+    )
+    .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+  const monthLabels = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+
+  const getDatasetForMonth = (year: number, monthIndex: number) => {
+    return compareDatasets.find(
+      (ds) =>
+        getYear(ds.timestamp) === year &&
+        ds.timestamp.getMonth() === monthIndex,
+    );
+  };
+
+  const buildCompareDataset = (
+    year: number,
+    label: string,
+    type: "athlete" | "personal" | "nutrition",
+    color: string,
+    dashed = false,
+  ) => ({
+    label: `${label} ${year}`,
+    data: monthLabels.map((_, monthIndex) => {
+      const dataset = getDatasetForMonth(year, monthIndex);
+      return dataset ? countSpecialType(dataset, type) : null;
+    }),
+    borderColor: color,
+    backgroundColor: color,
+    borderDash: dashed ? [6, 6] : [],
+    tension: 0.4,
+    spanGaps: true,
+  });
 
   return {
-    labels,
+    labels: monthLabels,
     datasets: [
-      {
-        label: "Athlete Packages",
-        data: sortedDatasets.map(
-          (ds) =>
-            ds.customers.filter((c) => {
-              const subscriptionLower = c.subscription.toLowerCase();
-              return (
-                subscriptionLower.includes("athlete") &&
-                subscriptionLower.includes("package")
-              );
-            }).length,
-        ),
-        borderColor: "#1a519b",
-        backgroundColor: "#1a519b",
-        tension: 0.4,
-      },
-      {
-        label: "Personal Training",
-        data: sortedDatasets.map(
-          (ds) =>
-            ds.customers.filter((c) => {
-              const subscriptionLower = c.subscription.toLowerCase();
-              return (
-                subscriptionLower.includes("personal") &&
-                subscriptionLower.includes("training")
-              );
-            }).length,
-        ),
-        borderColor: "#5a91db",
-        backgroundColor: "#5a91db",
-        tension: 0.4,
-      },
-      {
-        label: "Nutrition",
-        data: sortedDatasets.map(
-          (ds) =>
-            ds.customers.filter((c) => {
-              const subscriptionLower = c.subscription.toLowerCase();
-              return subscriptionLower.includes("nutrition");
-            }).length,
-        ),
-        borderColor: "#7ab1fb",
-        backgroundColor: "#7ab1fb",
-        tension: 0.4,
-      },
+      buildCompareDataset(
+        selectedYear,
+        "Athlete Packages",
+        "athlete",
+        "#1a519b",
+      ),
+      buildCompareDataset(
+        previousYear,
+        "Athlete Packages",
+        "athlete",
+        "#1a519b",
+        true,
+      ),
+
+      buildCompareDataset(
+        selectedYear,
+        "Personal Training",
+        "personal",
+        "#5a91db",
+      ),
+      buildCompareDataset(
+        previousYear,
+        "Personal Training",
+        "personal",
+        "#5a91db",
+        true,
+      ),
+
+      buildCompareDataset(selectedYear, "Nutrition", "nutrition", "#7ab1fb"),
+      buildCompareDataset(
+        previousYear,
+        "Nutrition",
+        "nutrition",
+        "#7ab1fb",
+        true,
+      ),
     ],
   };
 });
@@ -1940,6 +2185,35 @@ h3 {
 .wide-chart {
   grid-column: 1 / -1;
   height: 600px;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.chart-header h3 {
+  margin: 0;
+}
+
+.switch-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #1a519b;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.switch-label input {
+  cursor: pointer;
+}
+
+.switch-label.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .error {
