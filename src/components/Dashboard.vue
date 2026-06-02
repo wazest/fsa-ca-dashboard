@@ -3,6 +3,13 @@
     <header class="header">
       <div class="header-content">
         <h1>FSA CUSTOMER DATA DASHBOARD</h1>
+
+        <div class="settings-dropdown">
+          <select id="pricing-select" v-model="selectedPricing">
+            <option value="2025">Pricing 2025</option>
+            <option value="2026">Pricing 2026</option>
+          </select>
+        </div>
       </div>
     </header>
 
@@ -61,22 +68,68 @@
             <Bar :data="subscriptionBarData" :options="barChartOptions" />
           </div>
           <div class="chart">
-            <h3>All Subscriptions Revenue</h3>
-            <Bar
-              :data="allSubscriptionsRevenueData"
-              :options="revenueChartOptions"
-            />
-          </div>
-          <div class="chart">
             <h3>Relevant Types Revenue</h3>
             <Pie
               :data="relevantTypesRevenueData"
               :options="revenueChartOptions"
             />
           </div>
+          <div class="chart">
+            <h3>Subscription Duration Distribution</h3>
+            <Pie :data="subscriptionDurationData" :options="chartOptions" />
+          </div>
+          <div class="chart">
+            <h3>Revenue per Customer</h3>
+            <Bar :data="revenuePerCustomerData" :options="barChartOptions" />
+          </div>
+          <div class="chart">
+            <h3>Upgrade Funnel: Normal vs Pro</h3>
+            <Bar :data="upgradeFunnelData" :options="stackedChartOptions" />
+          </div>
           <div class="chart wide-chart">
-            <h3>Subscription Growth Over Time</h3>
+            <h3>Current Subscriptions Revenue</h3>
+            <Bar
+              :data="allSubscriptionsRevenueData"
+              :options="revenueChartOptions"
+            />
+          </div>
+          <div class="chart wide-chart">
+            <div class="chart-header">
+              <h3>Subscription Growth Over Time</h3>
+
+              <label
+                class="switch-label"
+                :class="{ disabled: selectedYears.length !== 1 }"
+              >
+                <input
+                  type="checkbox"
+                  v-model="compareToPreviousYear"
+                  :disabled="selectedYears.length !== 1"
+                />
+                Compare to pre year
+              </label>
+            </div>
+
             <Line :data="subscriptionGrowthData" :options="lineChartOptions" />
+          </div>
+          <div class="chart wide-chart">
+            <div class="chart-header">
+              <h3>Special Training Packages</h3>
+
+              <label
+                class="switch-label"
+                :class="{ disabled: selectedYears.length !== 1 }"
+              >
+                <input
+                  type="checkbox"
+                  v-model="compareToPreviousYear"
+                  :disabled="selectedYears.length !== 1"
+                />
+                Compare to pre year
+              </label>
+            </div>
+
+            <Line :data="specialTrainingData" :options="lineChartOptions" />
           </div>
           <div class="chart wide-chart">
             <h3>Trial Training Overview</h3>
@@ -85,11 +138,6 @@
           <div class="chart wide-chart">
             <h3>Monthly Conversions by Type</h3>
             <Bar :data="conversionChartData" :options="barChartOptions" />
-          </div>
-
-          <div class="chart wide-chart">
-            <h3>Special Training Packages</h3>
-            <Line :data="specialTrainingData" :options="lineChartOptions" />
           </div>
           <div class="chart wide-chart">
             <h3>Renewal Forecast</h3>
@@ -132,7 +180,9 @@
           </div>
 
           <div v-if="filteredDatasets.length > 0" class="chart wide-chart">
-            <h3>Auslaufende gekündigte Abos (gemäss Gültig bis)</h3>
+            <h3>
+              Auslaufende gekündigte Abos (gemäss Gültig bis, kein Folgeabo)
+            </h3>
             <Bar
               :data="cancellationsExpiringByMonth"
               :options="barChartOptions"
@@ -229,7 +279,7 @@ ChartJS.register(
   BarElement,
   LineElement,
   PointElement,
-  Title
+  Title,
 );
 
 interface Customer {
@@ -265,7 +315,125 @@ interface SubscriptionPrice {
   price: number;
 }
 
-const subscriptionPrices: SubscriptionPrice[] = [
+const relevantTypes = [
+  "Striking",
+  "Grappling",
+  "MMA",
+  "Fit & Athletik",
+  "Kinder",
+];
+
+const subscriptionPrices2026: SubscriptionPrice[] = [
+  { name: "Mitarbeiter", price: 0 },
+  { name: "Striking 1 Jahr | reduziert | Ratenzahlung", price: 995 },
+  { name: "Striking 1 Jahr | Ratenzahlung", price: 1250 },
+  { name: "Striking 6 Monate | reduziert | Ratenzahlung", price: 720 },
+  { name: "Striking 6 Monate | Ratenzahlung", price: 850 },
+  { name: "MMA 6 Monate | Ratenzahlung", price: 996 },
+  { name: "Kinder & Jugendliche 6 Monate", price: 490 },
+  { name: "MMA Pro 6 Monate | reduziert | Ratenzahlung", price: 1240 },
+  { name: "MMA Pro 1 Jahr | Ratenzahlung", price: 1905 },
+  { name: "MMA Pro 6 Monate | Ratenzahlung", price: 1391 },
+  { name: "MMA Pro 1 Jahr | monatlich", price: 1980 },
+  { name: "MMA Pro 1 Jahr | reduziert | monatlich", price: 1740 },
+  { name: "Striking 1 Jahr | Legacy", price: 1250 },
+  { name: "Week Pass Fit & Athletik", price: 50 },
+  { name: "Grappling 1 Jahr", price: 995 },
+  { name: "Goal Getter Personal Training | monatlich", price: 130 },
+  { name: "MMA 6 Monate | reduziert | Ratenzahlung", price: 845 },
+  { name: "Grappling 1 Jahr | Ratenzahlung", price: 995 },
+  { name: "Striking 1 Jahr", price: 1250 },
+  { name: "Probetraining Abo", price: 0 },
+  { name: "Nutrition Basic Continuous Athlete Support", price: 160 },
+  { name: "Special Member", price: 0 },
+  { name: "MMA Pro 1 Jahr", price: 1905 },
+  { name: "Striking 1 Jahr | reduziert", price: 995 },
+  { name: "5x Personal Training Package", price: 695 },
+  { name: "Day Pass", price: 35 },
+  { name: "Grappling 1 Jahr | reduziert", price: 850 },
+  { name: "Striking 6 Monate", price: 850 },
+  { name: "Striking 1 Jahr | monatlich", price: 1260 },
+  { name: "Striking 6 Monate | reduziert | monatlich", price: 780 },
+  { name: "MMA 1 Jahr | reduziert | monatlich", price: 1320 },
+  { name: "MMA 6 Monate | monatlich", price: 1170 },
+  { name: "MMA 6 Monate", price: 996 },
+  { name: "MMA 1 Jahr | reduziert", price: 1285 },
+  { name: "MMA 1 Jahr", price: 1510 },
+  { name: "Striking Pro 6 Monate | monatlich", price: 1320 },
+  { name: "Grappling 6 Monate", price: 685 },
+  { name: "Fit & Athletik 6 Monate | reduziert", price: 630 },
+  { name: "Grappling 1 Jahr | reduziert | monatlich", price: 960 },
+  { name: "Grappling 6 Monate | reduziert", price: 580 },
+  { name: "Grappling Pro 1 Jahr", price: 1390 },
+  { name: "Grappling Pro 6 Monate | reduziert | monatlich", price: 1080 },
+  { name: "Grappling Pro 6 Monate", price: 935 },
+  { name: "Grappling Pro 6 Monate | reduziert", price: 830 },
+  { name: "Fit & Athletik 1 Jahr", price: 1080 },
+  { name: "Striking 6 Monate | monatlich", price: 780 },
+  { name: "Grappling 1 Jahr | monatlich", price: 1080 },
+  { name: "Fit & Athletik 6 Monate", price: 740 },
+  { name: "Striking Pro 1 Jahr | monatlich", price: 1740 },
+  { name: "Fit & Athletik 1 Jahr | reduziert", price: 920 },
+  { name: "12x Personal Training Package", price: 1190 },
+  { name: "MMA Pro 6 Monate | monatlich", price: 1560 },
+  { name: "WAKO Lizenz", price: 0 },
+  { name: "NLZ Coach", price: 0 },
+  { name: "Probetraining Abo Kinder & Jugendliche", price: 0 },
+  { name: "Next Level Personal Training | monatlich", price: 420 },
+  { name: "MMA 1 Jahr | monatlich", price: 1560 },
+  {
+    name: "Nutrition One-Time Support: Messung der Körperzusammensetzung",
+    price: 180,
+  },
+  { name: "Grappling Pro 1 Jahr | Ratenzahlung", price: 1390 },
+  { name: "Grappling 6 Monate | reduziert | Ratenzahlung", price: 580 },
+  { name: "Grappling Pro 1 Jahr | reduziert | Ratenzahlung", price: 1245 },
+  { name: "MMA 1 Jahr | Ratenzahlung", price: 1510 },
+  { name: "Grappling 6 Monate | Ratenzahlung", price: 685 },
+  { name: "Fit & Athletik 1 Jahr | Ratenzahlung", price: 1080 },
+  { name: "MMA Pro 1 Jahr | reduziert | Ratenzahlung", price: 1680 },
+  { name: "Striking Pro 6 Monate | reduziert | Ratenzahlung", price: 1115 },
+  { name: "Fit & Athletik 6 Monate | reduziert | Ratenzahlung", price: 630 },
+  { name: "Striking Pro 1 Jahr | Ratenzahlung", price: 1645 },
+  { name: "MMA 1 Jahr | reduziert | Ratenzahlung", price: 1285 },
+  { name: "Striking Pro 6 Monate | Ratenzahlung", price: 1245 },
+  { name: "Fit & Athletik 1 Jahr | reduziert | Ratenzahlung", price: 920 },
+  { name: "Striking Pro 1 Jahr | reduziert | monatlich", price: 1500 },
+  { name: "Striking Pro 6 Monate", price: 1245 },
+  { name: "Grappling Pro 1 Jahr | reduziert", price: 1245 },
+  { name: "Striking Pro 1 Jahr | reduziert | Ratenzahlung", price: 1390 },
+  { name: "Fit & Athletik 6 Monate | Ratenzahlung", price: 740 },
+  { name: "Grappling Pro 6 Monate | Ratenzahlung", price: 935 },
+  { name: "MTT - Medizinische Trainingstherapie", price: 50 },
+  { name: "Grappling Pro 6 Monate | reduziert | Ratenzahlung", price: 830 },
+  { name: "Striking Pro 1 Jahr | reduziert", price: 1390 },
+  { name: "Striking Pro 1 Jahr | Legacy", price: 1645 },
+  { name: "Striking Pro 6 Monate | reduziert", price: 1115 },
+  { name: "Eltern Kinder 1 Jahr | Ratenzahlung", price: 1160 },
+  { name: "Kinder & Jugendliche 1 Jahr | Ratenzahlung", price: 720 },
+  { name: "Kinder & Jugendliche 1 Jahr", price: 720 },
+  { name: "Kinder & Jugendliche 6 Monate | Ratenzahlung", price: 490 },
+  { name: "Athlete - Advanced Package Standart", price: 255 },
+  { name: "1x Single Personal Training", price: 150 },
+  { name: "Next Level Intense Personal Training | monatlich", price: 800 },
+  { name: "Athlete - Advanced Package Pro", price: 350 },
+  { name: "Grappling 1 Jahr | reduziert | Ratenzahlung", price: 850 },
+  { name: "Striking 6 Monate | reduziert", price: 720 },
+  { name: "BJJ Kids Bullyproof", price: 0 },
+  { name: "Grappling 1 Jahr | Legacy", price: 995 },
+  { name: "EarlyBird 1 Jahr", price: 795 },
+  { name: "EarlyBird 6 Monate", price: 565 },
+  { name: "MMA 6 Monate | reduziert", price: 845 },
+  { name: "MMA Pro 1 Jahr | reduziert", price: 1680 },
+  { name: "Striking Pro 1 Jahr", price: 1645 },
+  { name: "Grappling 1 Jahr reduziert | Legacy", price: 850 },
+  { name: "Striking 1 Jahr | reduziert | monatlich", price: 1080 },
+  { name: "Goal Getter Intense Personal Training | monatlich", price: 240 },
+  { name: "Eltern Kinder 1 Jahr", price: 1160 },
+  { name: "Striking 6 Monate | Legacy", price: 850 },
+];
+
+const subscriptionPrices2025: SubscriptionPrice[] = [
   { name: "Mitarbeiter", price: 0 },
   { name: "Striking 1 Jahr | reduziert | Ratenzahlung", price: 970 },
   { name: "Striking 1 Jahr | Ratenzahlung", price: 1145 },
@@ -381,6 +549,9 @@ const error = ref("");
 const selectedFiles = ref<FileList | null>(null);
 const selectedYears = ref<number[]>([]);
 const selectedTableFilter = ref("All");
+const selectedPricing = ref<"2025" | "2026">("2026");
+const compareToPreviousYear = ref(false);
+const selectedCancellationFilter = ref("All");
 
 const subscriptionCategories = [
   "Striking",
@@ -401,8 +572,6 @@ const colorPalette = [
   "#7ab1fb",
 ];
 
-const selectedCancellationFilter = ref("All");
-
 const isValidDate = (date: any): boolean => {
   return date instanceof Date && !isNaN(date.getTime()) && date.getTime() > 0;
 };
@@ -417,7 +586,7 @@ const parseExcelDate = (date: any): Date | null => {
         const parsedDate = new Date(
           parseInt(year),
           parseInt(month) - 1,
-          parseInt(day)
+          parseInt(day),
         );
 
         return isValidDate(parsedDate) ? parsedDate : null;
@@ -429,6 +598,12 @@ const parseExcelDate = (date: any): Date | null => {
 
   return null;
 };
+
+const activeSubscriptionPrices = computed(() => {
+  return selectedPricing.value === "2025"
+    ? subscriptionPrices2025
+    : subscriptionPrices2026;
+});
 
 const availableYears = computed(() => {
   if (datasets.value.length === 0) return [];
@@ -454,15 +629,19 @@ const toggleYear = (year: number) => {
 const filteredDatasets = computed(() => {
   if (selectedYears.value.length === 0) return datasets.value;
   return datasets.value.filter((ds) =>
-    selectedYears.value.includes(getYear(ds.timestamp))
+    selectedYears.value.includes(getYear(ds.timestamp)),
   );
+});
+
+const shouldCompareToPreviousYear = computed(() => {
+  return compareToPreviousYear.value && selectedYears.value.length === 1;
 });
 
 const isRelevantSubscription = (subscription: string): boolean => {
   if (subscription.toLowerCase().includes("probetraining")) return false;
   const type = getSubscriptionType(subscription);
   return ["Striking", "Grappling", "MMA", "Fit & Athletik", "Kinder"].includes(
-    type
+    type,
   );
 };
 
@@ -488,31 +667,32 @@ const getSubscriptionType = (subscription: string): string => {
 const getSubscriptionPrice = (subscription: string): number => {
   const normalizedSubscription = subscription.toLowerCase().trim();
 
-  // Try exact match first
-  const exactMatch = subscriptionPrices.find(
-    (price) => price.name.toLowerCase() === normalizedSubscription
+  const prices = activeSubscriptionPrices.value;
+
+  // Exact match first
+  const exactMatch = prices.find(
+    (price) => price.name.toLowerCase().trim() === normalizedSubscription,
   );
   if (exactMatch) return exactMatch.price;
 
-  // Try fuzzy matching
-  const matchingPrices = subscriptionPrices.filter((price) => {
-    const priceName = price.name.toLowerCase();
+  // Fuzzy matching
+  const matchingPrices = prices.filter((price) => {
+    const priceName = price.name.toLowerCase().trim();
 
-    // Extract main type (Striking, Grappling, MMA, etc.)
     const mainType = priceName.split(" ")[0];
     if (!normalizedSubscription.includes(mainType)) return false;
 
-    // Check duration
     const hasYear =
       priceName.includes("jahr") === normalizedSubscription.includes("jahr");
+
     const hasMonth =
       priceName.includes("monate") ===
       normalizedSubscription.includes("monate");
 
-    // Check modifiers
     const hasReduced =
       priceName.includes("reduziert") ===
       normalizedSubscription.includes("reduziert");
+
     const hasPro =
       priceName.includes("pro") === normalizedSubscription.includes("pro");
 
@@ -520,37 +700,35 @@ const getSubscriptionPrice = (subscription: string): number => {
   });
 
   if (matchingPrices.length > 0) {
-    // Sort by price to get the closest match
     matchingPrices.sort((a, b) => {
       const aSimilarity = a.name
         .toLowerCase()
         .split(" ")
         .filter((word) => normalizedSubscription.includes(word)).length;
+
       const bSimilarity = b.name
         .toLowerCase()
         .split(" ")
         .filter((word) => normalizedSubscription.includes(word)).length;
+
       return bSimilarity - aSimilarity;
     });
+
     return matchingPrices[0].price;
   }
 
-  // Fallback prices for special cases
+  // Fallback prices
   if (normalizedSubscription.includes("kinder")) {
-    const kinderPrice = subscriptionPrices.find((p) =>
-      p.name.includes("Kinder")
-    );
-    return kinderPrice ? kinderPrice.price : 490.0;
+    const kinderPrice = prices.find((p) => p.name.includes("Kinder"));
+    return kinderPrice ? kinderPrice.price : 490;
   }
 
   if (
     normalizedSubscription.includes("fit") ||
     normalizedSubscription.includes("athletik")
   ) {
-    const fitPrice = subscriptionPrices.find((p) =>
-      p.name.includes("Fit & Athletik")
-    );
-    return fitPrice ? fitPrice.price : 740.0;
+    const fitPrice = prices.find((p) => p.name.includes("Fit & Athletik"));
+    return fitPrice ? fitPrice.price : 740;
   }
 
   console.log("No price match found for subscription:", subscription);
@@ -563,7 +741,7 @@ const totalCustomers = computed(() => {
   const latestDataset =
     filteredDatasets.value[filteredDatasets.value.length - 1];
   return latestDataset.customers.filter((customer) =>
-    isRelevantSubscription(customer.subscription)
+    isRelevantSubscription(customer.subscription),
   ).length;
 });
 
@@ -578,7 +756,7 @@ const subscriptionChartData = computed(() => {
     return latestDataset.customers.filter(
       (c) =>
         !c.subscription.toLowerCase().includes("probetraining") &&
-        getSubscriptionType(c.subscription) === category
+        getSubscriptionType(c.subscription) === category,
     ).length;
   });
 
@@ -605,9 +783,9 @@ const subscriptionBarData = computed(() => ({
             ].customers.filter(
               (c) =>
                 !c.subscription.toLowerCase().includes("probetraining") &&
-                getSubscriptionType(c.subscription) === category
+                getSubscriptionType(c.subscription) === category,
             ).length
-          : 0
+          : 0,
       ),
       backgroundColor: colorPalette,
     },
@@ -641,13 +819,13 @@ const allSubscriptionsRevenueData = computed(() => {
   });
 
   const sortedEntries = Array.from(subscriptionCounts.entries()).sort(
-    (a, b) => b[1].revenue - a[1].revenue
+    (a, b) => b[1].revenue - a[1].revenue,
   );
 
   const labels = sortedEntries.map(([label]) => label);
   const data = sortedEntries.map(([, value]) => value.revenue);
   const backgroundColor = labels.map(
-    (_, i) => colorPalette[i % colorPalette.length]
+    (_, i) => colorPalette[i % colorPalette.length],
   );
 
   return {
@@ -668,13 +846,6 @@ const relevantTypesRevenueData = computed(() => {
 
   const latestDataset =
     filteredDatasets.value[filteredDatasets.value.length - 1];
-  const relevantTypes = [
-    "Striking",
-    "Grappling",
-    "MMA",
-    "Fit & Athletik",
-    "Kinder",
-  ];
   const typeData = new Map<string, { count: number; revenue: number }>();
 
   relevantTypes.forEach((type) => {
@@ -699,22 +870,22 @@ const relevantTypesRevenueData = computed(() => {
   // Gesamtumsatz berechnen
   const totalRevenue = Array.from(typeData.values()).reduce(
     (sum, t) => sum + t.revenue,
-    0
+    0,
   );
 
   const sortedEntries = Array.from(typeData.entries()).sort(
-    (a, b) => b[1].revenue - a[1].revenue
+    (a, b) => b[1].revenue - a[1].revenue,
   );
 
   const labels = sortedEntries.map(([label]) => label);
   const data = sortedEntries.map(([, value]) => value.revenue);
   const backgroundColor = labels.map(
-    (_, i) => colorPalette[i % colorPalette.length]
+    (_, i) => colorPalette[i % colorPalette.length],
   );
 
   // Prozentwerte berechnen
   const percentages = sortedEntries.map(
-    ([, value]) => ((value.revenue / totalRevenue) * 100).toFixed(2) + "%"
+    ([, value]) => ((value.revenue / totalRevenue) * 100).toFixed(2) + "%",
   );
 
   return {
@@ -729,64 +900,378 @@ const relevantTypesRevenueData = computed(() => {
   };
 });
 
+const getSubscriptionDuration = (subscription: string): string => {
+  const lower = subscription.toLowerCase();
+
+  if (lower.includes("1 jahr")) return "1 Jahr";
+  if (lower.includes("6 monate")) return "6 Monate";
+  if (lower.includes("monatlich")) return "Monatlich";
+  if (lower.includes("week pass")) return "Week Pass";
+  if (lower.includes("day pass")) return "Day Pass";
+  if (lower.includes("personal training")) return "Personal Training";
+  if (lower.includes("nutrition")) return "Nutrition";
+  if (lower.includes("probetraining")) return "Probetraining";
+
+  return "Other";
+};
+
+const subscriptionDurationData = computed(() => {
+  if (filteredDatasets.value.length === 0)
+    return { labels: [], datasets: [{ data: [] }] };
+
+  const latestDataset =
+    filteredDatasets.value[filteredDatasets.value.length - 1];
+
+  const durationMap = new Map<string, number>();
+
+  latestDataset.customers.forEach((customer) => {
+    const subscription = customer.subscription || "";
+
+    if (!subscription) return;
+    if (subscription.toLowerCase().includes("probetraining")) return;
+
+    const duration = getSubscriptionDuration(subscription);
+
+    if (!durationMap.has(duration)) {
+      durationMap.set(duration, 0);
+    }
+
+    durationMap.set(duration, durationMap.get(duration)! + 1);
+  });
+
+  const preferredOrder = [
+    "1 Jahr",
+    "6 Monate",
+    "Monatlich",
+    "Week Pass",
+    "Day Pass",
+    "Personal Training",
+    "Nutrition",
+    "Other",
+  ];
+
+  const sortedEntries = Array.from(durationMap.entries()).sort(
+    ([a], [b]) => preferredOrder.indexOf(a) - preferredOrder.indexOf(b),
+  );
+
+  return {
+    labels: sortedEntries.map(([label]) => label),
+    datasets: [
+      {
+        data: sortedEntries.map(([, count]) => count),
+        backgroundColor: sortedEntries.map(
+          (_, i) => colorPalette[i % colorPalette.length],
+        ),
+      },
+    ],
+  };
+});
+
 const subscriptionGrowthData = computed(() => {
   if (filteredDatasets.value.length === 0) return { labels: [], datasets: [] };
 
-  const sortedDatasets = [...filteredDatasets.value].sort(
-    (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
-  );
+  // Normal mode: exactly like before
+  if (!shouldCompareToPreviousYear.value) {
+    const sortedDatasets = [...filteredDatasets.value].sort(
+      (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
+    );
 
-  const labels = sortedDatasets.map((ds) => format(ds.timestamp, "MMM yyyy"));
+    const labels = sortedDatasets.map((ds) => format(ds.timestamp, "MMM yyyy"));
 
-  const subscriptionData = subscriptionCategories.map((category, index) => ({
-    label: category,
-    data: sortedDatasets.map(
+    const subscriptionData = subscriptionCategories.map((category, index) => ({
+      label: category,
+      data: sortedDatasets.map(
+        (ds) =>
+          ds.customers.filter(
+            (c) =>
+              !c.subscription.toLowerCase().includes("probetraining") &&
+              getSubscriptionType(c.subscription) === category,
+          ).length,
+      ),
+      borderColor: colorPalette[index % colorPalette.length],
+      backgroundColor: colorPalette[index % colorPalette.length],
+      tension: 0.4,
+    }));
+
+    subscriptionData.push({
+      label: "Pro Subscriptions",
+      data: sortedDatasets.map(
+        (ds) =>
+          ds.customers.filter((c) => {
+            const subscriptionLower = c.subscription.toLowerCase();
+            return (
+              subscriptionLower.includes("pro") &&
+              !subscriptionLower.includes("probetraining")
+            );
+          }).length,
+      ),
+      borderColor: "#ff4444",
+      backgroundColor: "#ff4444",
+      tension: 0.4,
+    });
+
+    subscriptionData.push({
+      label: "Total (Relevant Types Only)",
+      data: sortedDatasets.map(
+        (ds) =>
+          ds.customers.filter((c) => isRelevantSubscription(c.subscription))
+            .length,
+      ),
+      borderColor: "#1a519b",
+      backgroundColor: "#1a519b",
+      borderWidth: 3,
+      tension: 0.4,
+    });
+
+    return {
+      labels,
+      datasets: subscriptionData,
+    };
+  }
+
+  // Compare mode
+  const selectedYear = selectedYears.value[0];
+  const previousYear = selectedYear - 1;
+
+  const compareDatasets = datasets.value
+    .filter((ds) =>
+      [selectedYear, previousYear].includes(getYear(ds.timestamp)),
+    )
+    .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+  const monthLabels = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+
+  const getDatasetForMonth = (year: number, monthIndex: number) => {
+    return compareDatasets.find(
       (ds) =>
-        ds.customers.filter(
-          (c) =>
-            !c.subscription.toLowerCase().includes("probetraining") &&
-            getSubscriptionType(c.subscription) === category
-        ).length
-    ),
-    borderColor: colorPalette[index % colorPalette.length],
-    backgroundColor: colorPalette[index % colorPalette.length],
-    tension: 0.4,
-  }));
+        getYear(ds.timestamp) === year &&
+        ds.timestamp.getMonth() === monthIndex,
+    );
+  };
 
-  // Add Pro subscriptions data
-  subscriptionData.push({
-    label: "Pro Subscriptions",
-    data: sortedDatasets.map(
-      (ds) =>
-        ds.customers.filter((c) => {
+  const buildCompareDataset = (
+    year: number,
+    category: string,
+    color: string,
+    dashed = false,
+  ) => ({
+    label: `${category} ${year}`,
+    data: monthLabels.map((_, monthIndex) => {
+      const dataset = getDatasetForMonth(year, monthIndex);
+
+      if (!dataset) return null;
+
+      if (category === "Total") {
+        return dataset.customers.filter((c) =>
+          isRelevantSubscription(c.subscription),
+        ).length;
+      }
+
+      if (category === "Pro") {
+        return dataset.customers.filter((c) => {
           const subscriptionLower = c.subscription.toLowerCase();
           return (
             subscriptionLower.includes("pro") &&
             !subscriptionLower.includes("probetraining")
           );
-        }).length
-    ),
-    borderColor: "#ff4444",
-    backgroundColor: "#ff4444",
+        }).length;
+      }
+
+      return dataset.customers.filter(
+        (c) =>
+          !c.subscription.toLowerCase().includes("probetraining") &&
+          getSubscriptionType(c.subscription) === category,
+      ).length;
+    }),
+    borderColor: color,
+    backgroundColor: color,
+    borderDash: dashed ? [6, 6] : [],
     tension: 0.4,
+    spanGaps: true,
   });
 
-  subscriptionData.push({
-    label: "Total (Relevant Types Only)",
-    data: sortedDatasets.map(
-      (ds) =>
-        ds.customers.filter((c) => isRelevantSubscription(c.subscription))
-          .length
-    ),
-    borderColor: "#1a519b",
-    backgroundColor: "#1a519b",
-    borderWidth: 3,
-    tension: 0.4,
+  const chartDatasets: any[] = [];
+
+  subscriptionCategories.forEach((category, index) => {
+    chartDatasets.push(
+      buildCompareDataset(
+        selectedYear,
+        category,
+        colorPalette[index % colorPalette.length],
+      ),
+    );
+
+    chartDatasets.push(
+      buildCompareDataset(
+        previousYear,
+        category,
+        colorPalette[index % colorPalette.length],
+        true,
+      ),
+    );
+  });
+
+  chartDatasets.push(buildCompareDataset(selectedYear, "Pro", "#ff4444"));
+  chartDatasets.push(buildCompareDataset(previousYear, "Pro", "#ff4444", true));
+
+  chartDatasets.push(buildCompareDataset(selectedYear, "Total", "#1a519b"));
+  chartDatasets.push(
+    buildCompareDataset(previousYear, "Total", "#1a519b", true),
+  );
+
+  return {
+    labels: monthLabels,
+    datasets: chartDatasets,
+  };
+});
+
+const revenuePerCustomerData = computed(() => {
+  if (filteredDatasets.value.length === 0)
+    return { labels: [], datasets: [{ data: [] }] };
+
+  const latestDataset =
+    filteredDatasets.value[filteredDatasets.value.length - 1];
+
+  const typeData = new Map<
+    string,
+    { customers: number; revenue: number; revenuePerCustomer: number }
+  >();
+
+  relevantTypes.forEach((type) => {
+    typeData.set(type, {
+      customers: 0,
+      revenue: 0,
+      revenuePerCustomer: 0,
+    });
+  });
+
+  latestDataset.customers.forEach((customer) => {
+    const subscription = customer.subscription || "";
+
+    if (subscription.toLowerCase().includes("probetraining")) return;
+
+    const type = getSubscriptionType(subscription);
+
+    if (!relevantTypes.includes(type)) return;
+
+    const current = typeData.get(type)!;
+
+    current.customers += 1;
+    current.revenue += getSubscriptionPrice(subscription);
+  });
+
+  const sortedEntries = Array.from(typeData.entries())
+    .map(([type, data]) => {
+      const revenuePerCustomer =
+        data.customers > 0 ? Math.round(data.revenue / data.customers) : 0;
+
+      return [
+        type,
+        {
+          ...data,
+          revenuePerCustomer,
+        },
+      ] as const;
+    })
+    .sort((a, b) => b[1].revenuePerCustomer - a[1].revenuePerCustomer);
+
+  return {
+    labels: sortedEntries.map(([type]) => type),
+    datasets: [
+      {
+        label: "CHF per Customer",
+        data: sortedEntries.map(([, data]) => data.revenuePerCustomer),
+        backgroundColor: sortedEntries.map(
+          (_, i) => colorPalette[i % colorPalette.length],
+        ),
+      },
+    ],
+  };
+});
+
+const upgradeFunnelData = computed(() => {
+  if (filteredDatasets.value.length === 0) return { labels: [], datasets: [] };
+
+  const latestDataset =
+    filteredDatasets.value[filteredDatasets.value.length - 1];
+
+  const upgradeTypes = ["Striking", "Grappling", "MMA"];
+
+  const funnelData = new Map<
+    string,
+    { normal: number; pro: number; total: number; proRate: number }
+  >();
+
+  upgradeTypes.forEach((type) => {
+    funnelData.set(type, {
+      normal: 0,
+      pro: 0,
+      total: 0,
+      proRate: 0,
+    });
+  });
+
+  latestDataset.customers.forEach((customer) => {
+    const subscription = customer.subscription || "";
+
+    if (subscription.toLowerCase().includes("probetraining")) return;
+
+    const type = getSubscriptionType(subscription);
+
+    if (!upgradeTypes.includes(type)) return;
+
+    const isPro = subscription.toLowerCase().includes("pro");
+    const current = funnelData.get(type)!;
+
+    if (isPro) {
+      current.pro += 1;
+    } else {
+      current.normal += 1;
+    }
+
+    current.total += 1;
+  });
+
+  const sortedEntries = Array.from(funnelData.entries()).map(([type, data]) => {
+    const proRate =
+      data.total > 0 ? Math.round((data.pro / data.total) * 1000) / 10 : 0;
+
+    return [
+      `${type} (${proRate}% Pro)`,
+      {
+        ...data,
+        proRate,
+      },
+    ] as const;
   });
 
   return {
-    labels,
-    datasets: subscriptionData,
+    labels: sortedEntries.map(([label]) => label),
+    datasets: [
+      {
+        label: "Normal",
+        data: sortedEntries.map(([, data]) => data.normal),
+        backgroundColor: "#999999",
+      },
+      {
+        label: "Pro",
+        data: sortedEntries.map(([, data]) => data.pro),
+        backgroundColor: "#1a519b",
+      },
+    ],
   };
 });
 
@@ -794,7 +1279,7 @@ const probetrainingData = computed(() => {
   if (filteredDatasets.value.length === 0) return { labels: [], datasets: [] };
 
   const sortedDatasets = [...filteredDatasets.value].sort(
-    (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+    (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
   );
 
   const labels = sortedDatasets.map((ds) => format(ds.timestamp, "MMM yyyy"));
@@ -875,7 +1360,7 @@ const conversionChartData = computed(() => {
 
   // Schritt 3: Labels sortieren
   const sortedLabels = Array.from(conversionMap.keys()).sort(
-    (a, b) => new Date(a).getTime() - new Date(b).getTime()
+    (a, b) => new Date(a).getTime() - new Date(b).getTime(),
   );
 
   // Schritt 4: Daten für jedes Typ-Label kombinieren
@@ -901,60 +1386,162 @@ const conversionChartData = computed(() => {
 const specialTrainingData = computed(() => {
   if (filteredDatasets.value.length === 0) return { labels: [], datasets: [] };
 
-  const sortedDatasets = [...filteredDatasets.value].sort(
-    (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
-  );
+  const countSpecialType = (
+    dataset: DataSet,
+    type: "athlete" | "personal" | "nutrition",
+  ) => {
+    return dataset.customers.filter((c) => {
+      const subscriptionLower = c.subscription.toLowerCase();
 
-  const labels = sortedDatasets.map((ds) => format(ds.timestamp, "MMM yyyy"));
+      if (type === "athlete") {
+        return (
+          subscriptionLower.includes("athlete") &&
+          subscriptionLower.includes("package")
+        );
+      }
+
+      if (type === "personal") {
+        return (
+          subscriptionLower.includes("personal") &&
+          subscriptionLower.includes("training")
+        );
+      }
+
+      if (type === "nutrition") {
+        return subscriptionLower.includes("nutrition");
+      }
+
+      return false;
+    }).length;
+  };
+
+  // Normal mode: exactly like before
+  if (!shouldCompareToPreviousYear.value) {
+    const sortedDatasets = [...filteredDatasets.value].sort(
+      (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
+    );
+
+    const labels = sortedDatasets.map((ds) => format(ds.timestamp, "MMM yyyy"));
+
+    return {
+      labels,
+      datasets: [
+        {
+          label: "Athlete Packages",
+          data: sortedDatasets.map((ds) => countSpecialType(ds, "athlete")),
+          borderColor: "#1a519b",
+          backgroundColor: "#1a519b",
+          tension: 0.4,
+        },
+        {
+          label: "Personal Training",
+          data: sortedDatasets.map((ds) => countSpecialType(ds, "personal")),
+          borderColor: "#5a91db",
+          backgroundColor: "#5a91db",
+          tension: 0.4,
+        },
+        {
+          label: "Nutrition",
+          data: sortedDatasets.map((ds) => countSpecialType(ds, "nutrition")),
+          borderColor: "#7ab1fb",
+          backgroundColor: "#7ab1fb",
+          tension: 0.4,
+        },
+      ],
+    };
+  }
+
+  // Compare mode
+  const selectedYear = selectedYears.value[0];
+  const previousYear = selectedYear - 1;
+
+  const compareDatasets = datasets.value
+    .filter((ds) =>
+      [selectedYear, previousYear].includes(getYear(ds.timestamp)),
+    )
+    .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+  const monthLabels = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+
+  const getDatasetForMonth = (year: number, monthIndex: number) => {
+    return compareDatasets.find(
+      (ds) =>
+        getYear(ds.timestamp) === year &&
+        ds.timestamp.getMonth() === monthIndex,
+    );
+  };
+
+  const buildCompareDataset = (
+    year: number,
+    label: string,
+    type: "athlete" | "personal" | "nutrition",
+    color: string,
+    dashed = false,
+  ) => ({
+    label: `${label} ${year}`,
+    data: monthLabels.map((_, monthIndex) => {
+      const dataset = getDatasetForMonth(year, monthIndex);
+      return dataset ? countSpecialType(dataset, type) : null;
+    }),
+    borderColor: color,
+    backgroundColor: color,
+    borderDash: dashed ? [6, 6] : [],
+    tension: 0.4,
+    spanGaps: true,
+  });
 
   return {
-    labels,
+    labels: monthLabels,
     datasets: [
-      {
-        label: "Athlete Packages",
-        data: sortedDatasets.map(
-          (ds) =>
-            ds.customers.filter((c) => {
-              const subscriptionLower = c.subscription.toLowerCase();
-              return (
-                subscriptionLower.includes("athlete") &&
-                subscriptionLower.includes("package")
-              );
-            }).length
-        ),
-        borderColor: "#1a519b",
-        backgroundColor: "#1a519b",
-        tension: 0.4,
-      },
-      {
-        label: "Personal Training",
-        data: sortedDatasets.map(
-          (ds) =>
-            ds.customers.filter((c) => {
-              const subscriptionLower = c.subscription.toLowerCase();
-              return (
-                subscriptionLower.includes("personal") &&
-                subscriptionLower.includes("training")
-              );
-            }).length
-        ),
-        borderColor: "#5a91db",
-        backgroundColor: "#5a91db",
-        tension: 0.4,
-      },
-      {
-        label: "Nutrition",
-        data: sortedDatasets.map(
-          (ds) =>
-            ds.customers.filter((c) => {
-              const subscriptionLower = c.subscription.toLowerCase();
-              return subscriptionLower.includes("nutrition");
-            }).length
-        ),
-        borderColor: "#7ab1fb",
-        backgroundColor: "#7ab1fb",
-        tension: 0.4,
-      },
+      buildCompareDataset(
+        selectedYear,
+        "Athlete Packages",
+        "athlete",
+        "#1a519b",
+      ),
+      buildCompareDataset(
+        previousYear,
+        "Athlete Packages",
+        "athlete",
+        "#1a519b",
+        true,
+      ),
+
+      buildCompareDataset(
+        selectedYear,
+        "Personal Training",
+        "personal",
+        "#5a91db",
+      ),
+      buildCompareDataset(
+        previousYear,
+        "Personal Training",
+        "personal",
+        "#5a91db",
+        true,
+      ),
+
+      buildCompareDataset(selectedYear, "Nutrition", "nutrition", "#7ab1fb"),
+      buildCompareDataset(
+        previousYear,
+        "Nutrition",
+        "nutrition",
+        "#7ab1fb",
+        true,
+      ),
     ],
   };
 });
@@ -985,7 +1572,7 @@ const renewalForecastData = computed(() => {
   });
 
   const sortedEntries = Array.from(renewalMap.entries()).sort(
-    ([a], [b]) => new Date(a).getTime() - new Date(b).getTime()
+    ([a], [b]) => new Date(a).getTime() - new Date(b).getTime(),
   );
 
   const labels = sortedEntries.map(([label]) => label);
@@ -1014,7 +1601,7 @@ const cancellationsByMonth = computed(() => {
       const subscriptionType = getSubscriptionType(subscription);
       if (
         !["Striking", "Grappling", "Fit & Athletik", "MMA", "Kinder"].includes(
-          subscriptionType
+          subscriptionType,
         )
       )
         continue;
@@ -1032,7 +1619,7 @@ const cancellationsByMonth = computed(() => {
         const parsed = new Date(
           parseInt(year),
           parseInt(month) - 1,
-          parseInt(day)
+          parseInt(day),
         );
         const label = format(parsed, "MMM yyyy");
 
@@ -1043,7 +1630,7 @@ const cancellationsByMonth = computed(() => {
   }
 
   const sortedEntries = Array.from(cancellationMap.entries()).sort(
-    ([a], [b]) => new Date(a).getTime() - new Date(b).getTime()
+    ([a], [b]) => new Date(a).getTime() - new Date(b).getTime(),
   );
 
   return {
@@ -1061,47 +1648,74 @@ const cancellationsByMonth = computed(() => {
 const cancellationsExpiringByMonth = computed(() => {
   const expiryMap = new Map<string, number>();
 
+  // Step 1: Indexiere alle Abos pro Kunde
+  const futureSubscriptions = new Map<string, Date[]>();
+
+  for (const dataset of filteredDatasets.value) {
+    for (const customer of dataset.customers) {
+      const email = customer.email || customer.name;
+      const type = getSubscriptionType(customer.subscription || "");
+      const validFrom = customer.validFrom;
+
+      if (!relevantTypes.includes(type)) continue;
+      if (!isValidDate(validFrom)) continue;
+
+      const key = `${email}-${type}`;
+
+      if (!futureSubscriptions.has(key)) {
+        futureSubscriptions.set(key, []);
+      }
+      futureSubscriptions.get(key)!.push(validFrom);
+    }
+  }
+
+  // Step 2: Sortiere alle Dates
+  for (const [_, dates] of futureSubscriptions) {
+    dates.sort((a, b) => a.getTime() - b.getTime());
+  }
+
+  // Step 3: Prüfe Kündigungen
   for (const dataset of filteredDatasets.value) {
     for (const customer of dataset.customers) {
       const status = (customer.subscriptionStatus || "").toLowerCase();
       const subscription = customer.subscription || "";
       const validUntil = customer.validUntil;
+      const type = getSubscriptionType(subscription);
+      const email = customer.email || customer.name;
 
-      const subscriptionType = getSubscriptionType(subscription);
-      if (
-        !["Striking", "Grappling", "Fit & Athletik", "MMA", "Kinder"].includes(
-          subscriptionType
-        )
-      )
-        continue;
-
+      if (!relevantTypes.includes(type)) continue;
       if (
         selectedCancellationFilter.value !== "All" &&
-        subscriptionType !== selectedCancellationFilter.value
+        type !== selectedCancellationFilter.value
       )
         continue;
 
       const isCancelled = status.includes("gekündigt am");
       if (!isCancelled || !isValidDate(validUntil)) continue;
 
-      const label = format(validUntil!, "MMM yyyy");
+      const key = `${email}-${type}`;
+      const futureStarts = futureSubscriptions.get(key) || [];
 
-      if (!expiryMap.has(label)) expiryMap.set(label, 0);
-      expiryMap.set(label, expiryMap.get(label)! + 1);
+      const hasFollowUp = futureStarts.some((start) => start > validUntil);
+      if (!hasFollowUp) {
+        const label = format(validUntil, "MMM yyyy");
+        if (!expiryMap.has(label)) expiryMap.set(label, 0);
+        expiryMap.set(label, expiryMap.get(label)! + 1);
+      }
     }
   }
 
   const sortedEntries = Array.from(expiryMap.entries()).sort(
-    ([a], [b]) => new Date(a).getTime() - new Date(b).getTime()
+    ([a], [b]) => new Date(a).getTime() - new Date(b).getTime(),
   );
 
   return {
     labels: sortedEntries.map(([label]) => label),
     datasets: [
       {
-        label: "Kündigungen (Ablaufdatum)",
+        label: "Kündigungen (Ablaufdatum, ohne neues Abo)",
         data: sortedEntries.map(([, count]) => count),
-        backgroundColor: "#ffa500", // Orange für Unterscheidung
+        backgroundColor: "#ffa500",
       },
     ],
   };
@@ -1231,6 +1845,32 @@ const barChartOptions = {
       },
       ticks: {
         color: "#1a519b",
+      },
+    },
+  },
+};
+
+const stackedChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      display: true,
+    },
+    tooltip: {
+      mode: "index",
+      intersect: false,
+    },
+  },
+  scales: {
+    x: {
+      stacked: true,
+    },
+    y: {
+      stacked: true,
+      beginAtZero: true,
+      ticks: {
+        stepSize: 1,
       },
     },
   },
@@ -1368,7 +2008,7 @@ const processFiles = async () => {
     }
 
     datasets.value.sort(
-      (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+      (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
     );
     initializeYearFilter();
   } catch (err: any) {
@@ -1403,6 +2043,25 @@ const processFiles = async () => {
   margin: 0 auto;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+}
+
+.settings-dropdown {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: bold;
+  color: #1a519b;
+}
+
+.settings-dropdown select {
+  padding: 8px 12px;
+  border: 2px solid #1a519b;
+  border-radius: 4px;
+  background: white;
+  color: #1a519b;
+  font-weight: bold;
+  cursor: pointer;
 }
 
 h1 {
@@ -1526,6 +2185,35 @@ h3 {
 .wide-chart {
   grid-column: 1 / -1;
   height: 600px;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.chart-header h3 {
+  margin: 0;
+}
+
+.switch-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #1a519b;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.switch-label input {
+  cursor: pointer;
+}
+
+.switch-label.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .error {
