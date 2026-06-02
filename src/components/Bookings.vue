@@ -70,6 +70,13 @@
             <Bar :data="averageBookingsChartData" :options="chartOptions" />
           </div>
         </div>
+
+        <div class="chart-wrapper wide-chart">
+          <h3>Bookings by Time Slot</h3>
+          <div class="chart">
+            <Bar :data="bookingsByTimeChartData" :options="chartOptions" />
+          </div>
+        </div>
       </div>
 
       <div v-if="bookingData.length > 0" class="stats-container">
@@ -84,6 +91,15 @@
         <div class="stat-card">
           <h4>Highest Average</h4>
           <p class="count">{{ highestAverageBookings }}</p>
+        </div>
+        <div class="stat-card">
+          <h4>Total Bookings</h4>
+          <p class="count">{{ totalBookings }}</p>
+        </div>
+
+        <div class="stat-card">
+          <h4>Total Lessons</h4>
+          <p class="count">{{ totalLessons }}</p>
         </div>
       </div>
     </main>
@@ -111,7 +127,7 @@ ChartJS.register(
   BarElement,
   Title,
   Tooltip,
-  Legend
+  Legend,
 );
 
 interface Booking {
@@ -119,6 +135,8 @@ interface Booking {
   weekday: string;
   time: string;
   averageAttendance: number;
+  totalAttendance: number;
+  totalLessons: number;
   date: Date;
 }
 
@@ -127,6 +145,8 @@ interface ClassAverage {
   weekday: string;
   time: string;
   averageAttendance: number;
+  totalAttendance: number;
+  fileCount: number;
 }
 
 type FilterType = "all" | "kickboxing" | "bjj" | "athletik";
@@ -175,6 +195,28 @@ const isValidDate = (date: any): boolean => {
 
 const formatDate = (date: Date): string => {
   return format(date, "MMM d, yyyy");
+};
+
+const isRelevantClass = (className: string): boolean => {
+  const lower = className.toLowerCase();
+
+  const excludedKeywords = ["test", "testing", "seminar", "workshop", "event"];
+
+  if (excludedKeywords.some((keyword) => lower.includes(keyword))) {
+    return false;
+  }
+
+  const includedKeywords = [
+    "kickbox",
+    "fitbox",
+    "bjj",
+    "athletik",
+    "athletic",
+    "kids",
+    "competition",
+  ];
+
+  return includedKeywords.some((keyword) => lower.includes(keyword));
 };
 
 const toggleFilter = (filter: FilterType) => {
@@ -229,7 +271,7 @@ const overallAverageBookings = computed(() => {
   if (filteredClassAverages.value.length === 0) return 0;
   const sum = filteredClassAverages.value.reduce(
     (total, cls) => total + cls.averageAttendance,
-    0
+    0,
   );
   return Math.round((sum / filteredClassAverages.value.length) * 10) / 10;
 });
@@ -237,7 +279,7 @@ const overallAverageBookings = computed(() => {
 const highestAverageBookings = computed(() => {
   if (filteredClassAverages.value.length === 0) return 0;
   const highest = Math.max(
-    ...filteredClassAverages.value.map((cls) => cls.averageAttendance)
+    ...filteredClassAverages.value.map((cls) => cls.averageAttendance),
   );
   return highest;
 });
@@ -258,12 +300,15 @@ const classAverages = computed(() => {
           className: booking.className,
           weekday: booking.weekday,
           time: booking.time,
-          averageAttendance: booking.averageAttendance,
+          averageAttendance: 0,
+          totalAttendance: booking.averageAttendance,
+          fileCount: 1,
           names: new Set([booking.className]),
         });
       } else {
         const entry = classMap.get(key)!;
-        entry.averageAttendance += booking.averageAttendance;
+        entry.totalAttendance += booking.averageAttendance;
+        entry.fileCount += 1;
         entry.names.add(booking.className);
       }
     });
@@ -273,7 +318,10 @@ const classAverages = computed(() => {
       className: Array.from(entry.names).join(" + "),
       weekday: entry.weekday,
       time: entry.time,
-      averageAttendance: entry.averageAttendance,
+      totalAttendance: entry.totalAttendance,
+      fileCount: entry.fileCount,
+      averageAttendance:
+        Math.round((entry.totalAttendance / entry.fileCount) * 10) / 10,
     }))
     .sort((a, b) => {
       const weekdayA = weekdayOrder[weekdayMap[a.weekday] || a.weekday] || 0;
@@ -283,6 +331,66 @@ const classAverages = computed(() => {
       if (a.time !== b.time) return a.time.localeCompare(b.time);
       return a.className.localeCompare(b.className);
     });
+});
+
+const bookingsByTimeChartData = computed(() => {
+  const timeMap = new Map<
+    string,
+    {
+      totalAttendance: number;
+      count: number;
+    }
+  >();
+
+  bookingData.value
+    .filter((booking) => matchesFilter(booking.className))
+    .forEach((booking) => {
+      const time = booking.time;
+
+      if (!timeMap.has(time)) {
+        timeMap.set(time, {
+          totalAttendance: 0,
+          count: 0,
+        });
+      }
+
+      const current = timeMap.get(time)!;
+
+      current.totalAttendance += booking.averageAttendance;
+      current.count += 1;
+    });
+
+  const sortedEntries = Array.from(timeMap.entries())
+    .map(([time, data]) => ({
+      time,
+      average: Math.round((data.totalAttendance / data.count) * 10) / 10,
+    }))
+    .sort((a, b) => a.time.localeCompare(b.time));
+
+  return {
+    labels: sortedEntries.map((e) => e.time),
+    datasets: [
+      {
+        label: "Average Bookings",
+        data: sortedEntries.map((e) => e.average),
+        backgroundColor: sortedEntries.map(
+          (_, i) => colorPalette[i % colorPalette.length],
+        ),
+      },
+    ],
+  };
+});
+
+const totalBookings = computed(() => {
+  return bookingData.value
+    .filter((booking) => matchesFilter(booking.className))
+    .reduce((sum, booking) => sum + booking.totalAttendance, 0);
+});
+
+const totalLessons = computed(() => {
+  return bookingData.value
+    .filter((booking) => matchesFilter(booking.className))
+    .reduce((sum, booking) => sum + booking.totalLessons, 0);
 });
 
 const averageBookingsChartData = computed(() => {
@@ -302,7 +410,7 @@ const averageBookingsChartData = computed(() => {
         label: "Average Bookings",
         data,
         backgroundColor: data.map(
-          (_, index) => colorPalette[index % colorPalette.length]
+          (_, index) => colorPalette[index % colorPalette.length],
         ),
         barPercentage: 0.8,
         categoryPercentage: 0.9,
@@ -356,7 +464,7 @@ const extractTimestampFromFilename = (filename: string): Date => {
     parseInt(match[1].substring(4, 6)) - 1, // month (0-based)
     parseInt(match[1].substring(6, 8)), // day
     parseInt(match[1].substring(8, 10)), // hours
-    parseInt(match[1].substring(10, 12)) // minutes
+    parseInt(match[1].substring(10, 12)), // minutes
   );
 };
 
@@ -385,8 +493,10 @@ const processFiles = async () => {
             weekday: row["Tag"] || "",
             time: row["Zeit"] || "",
             averageAttendance: parseFloat(
-              row["Durchschnittliche Teilnehmerzahl"] || "0"
+              row["Durchschnittliche Teilnehmerzahl"] || "0",
             ),
+            totalAttendance: parseFloat(row["Teilnehmerzahl total"] || "0"),
+            totalLessons: parseFloat(row["Anzahl Lektionen Total"] || "0"),
             date: timestamp,
           };
         })
@@ -394,13 +504,15 @@ const processFiles = async () => {
           (booking): booking is Booking =>
             booking.className !== "" &&
             booking.weekday !== "" &&
-            booking.averageAttendance > 0
+            booking.averageAttendance > 0 &&
+            booking.totalAttendance > 0 &&
+            booking.totalLessons > 0 &&
+            isRelevantClass(booking.className),
         );
 
       bookingData.value.push(...processedData);
     }
 
-    // Sort bookings by date
     bookingData.value.sort((a, b) => a.date.getTime() - b.date.getTime());
   } catch (err: any) {
     error.value = err.message;
