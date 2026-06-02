@@ -3,6 +3,13 @@
     <header class="header">
       <div class="header-content">
         <h1>FSA CUSTOMER DATA DASHBOARD</h1>
+
+        <div class="settings-dropdown">
+          <select id="pricing-select" v-model="selectedPricing">
+            <option value="2025">Pricing 2025</option>
+            <option value="2026">Pricing 2026</option>
+          </select>
+        </div>
       </div>
     </header>
 
@@ -132,7 +139,9 @@
           </div>
 
           <div v-if="filteredDatasets.length > 0" class="chart wide-chart">
-            <h3>Auslaufende gekündigte Abos (gemäss Gültig bis)</h3>
+            <h3>
+              Auslaufende gekündigte Abos (gemäss Gültig bis, kein Folgeabo)
+            </h3>
             <Bar
               :data="cancellationsExpiringByMonth"
               :options="barChartOptions"
@@ -229,7 +238,7 @@ ChartJS.register(
   BarElement,
   LineElement,
   PointElement,
-  Title
+  Title,
 );
 
 interface Customer {
@@ -265,7 +274,125 @@ interface SubscriptionPrice {
   price: number;
 }
 
-const subscriptionPrices: SubscriptionPrice[] = [
+const relevantTypes = [
+  "Striking",
+  "Grappling",
+  "MMA",
+  "Fit & Athletik",
+  "Kinder",
+];
+
+const subscriptionPrices2026: SubscriptionPrice[] = [
+  { name: "Mitarbeiter", price: 0 },
+  { name: "Striking 1 Jahr | reduziert | Ratenzahlung", price: 995 },
+  { name: "Striking 1 Jahr | Ratenzahlung", price: 1250 },
+  { name: "Striking 6 Monate | reduziert | Ratenzahlung", price: 720 },
+  { name: "Striking 6 Monate | Ratenzahlung", price: 850 },
+  { name: "MMA 6 Monate | Ratenzahlung", price: 996 },
+  { name: "Kinder & Jugendliche 6 Monate", price: 490 },
+  { name: "MMA Pro 6 Monate | reduziert | Ratenzahlung", price: 1240 },
+  { name: "MMA Pro 1 Jahr | Ratenzahlung", price: 1905 },
+  { name: "MMA Pro 6 Monate | Ratenzahlung", price: 1391 },
+  { name: "MMA Pro 1 Jahr | monatlich", price: 1980 },
+  { name: "MMA Pro 1 Jahr | reduziert | monatlich", price: 1740 },
+  { name: "Striking 1 Jahr | Legacy", price: 1250 },
+  { name: "Week Pass Fit & Athletik", price: 50 },
+  { name: "Grappling 1 Jahr", price: 995 },
+  { name: "Goal Getter Personal Training | monatlich", price: 130 },
+  { name: "MMA 6 Monate | reduziert | Ratenzahlung", price: 845 },
+  { name: "Grappling 1 Jahr | Ratenzahlung", price: 995 },
+  { name: "Striking 1 Jahr", price: 1250 },
+  { name: "Probetraining Abo", price: 0 },
+  { name: "Nutrition Basic Continuous Athlete Support", price: 160 },
+  { name: "Special Member", price: 0 },
+  { name: "MMA Pro 1 Jahr", price: 1905 },
+  { name: "Striking 1 Jahr | reduziert", price: 995 },
+  { name: "5x Personal Training Package", price: 695 },
+  { name: "Day Pass", price: 35 },
+  { name: "Grappling 1 Jahr | reduziert", price: 850 },
+  { name: "Striking 6 Monate", price: 850 },
+  { name: "Striking 1 Jahr | monatlich", price: 1260 },
+  { name: "Striking 6 Monate | reduziert | monatlich", price: 780 },
+  { name: "MMA 1 Jahr | reduziert | monatlich", price: 1320 },
+  { name: "MMA 6 Monate | monatlich", price: 1170 },
+  { name: "MMA 6 Monate", price: 996 },
+  { name: "MMA 1 Jahr | reduziert", price: 1285 },
+  { name: "MMA 1 Jahr", price: 1510 },
+  { name: "Striking Pro 6 Monate | monatlich", price: 1320 },
+  { name: "Grappling 6 Monate", price: 685 },
+  { name: "Fit & Athletik 6 Monate | reduziert", price: 630 },
+  { name: "Grappling 1 Jahr | reduziert | monatlich", price: 960 },
+  { name: "Grappling 6 Monate | reduziert", price: 580 },
+  { name: "Grappling Pro 1 Jahr", price: 1390 },
+  { name: "Grappling Pro 6 Monate | reduziert | monatlich", price: 1080 },
+  { name: "Grappling Pro 6 Monate", price: 935 },
+  { name: "Grappling Pro 6 Monate | reduziert", price: 830 },
+  { name: "Fit & Athletik 1 Jahr", price: 1080 },
+  { name: "Striking 6 Monate | monatlich", price: 780 },
+  { name: "Grappling 1 Jahr | monatlich", price: 1080 },
+  { name: "Fit & Athletik 6 Monate", price: 740 },
+  { name: "Striking Pro 1 Jahr | monatlich", price: 1740 },
+  { name: "Fit & Athletik 1 Jahr | reduziert", price: 920 },
+  { name: "12x Personal Training Package", price: 1190 },
+  { name: "MMA Pro 6 Monate | monatlich", price: 1560 },
+  { name: "WAKO Lizenz", price: 0 },
+  { name: "NLZ Coach", price: 0 },
+  { name: "Probetraining Abo Kinder & Jugendliche", price: 0 },
+  { name: "Next Level Personal Training | monatlich", price: 420 },
+  { name: "MMA 1 Jahr | monatlich", price: 1560 },
+  {
+    name: "Nutrition One-Time Support: Messung der Körperzusammensetzung",
+    price: 180,
+  },
+  { name: "Grappling Pro 1 Jahr | Ratenzahlung", price: 1390 },
+  { name: "Grappling 6 Monate | reduziert | Ratenzahlung", price: 580 },
+  { name: "Grappling Pro 1 Jahr | reduziert | Ratenzahlung", price: 1245 },
+  { name: "MMA 1 Jahr | Ratenzahlung", price: 1510 },
+  { name: "Grappling 6 Monate | Ratenzahlung", price: 685 },
+  { name: "Fit & Athletik 1 Jahr | Ratenzahlung", price: 1080 },
+  { name: "MMA Pro 1 Jahr | reduziert | Ratenzahlung", price: 1680 },
+  { name: "Striking Pro 6 Monate | reduziert | Ratenzahlung", price: 1115 },
+  { name: "Fit & Athletik 6 Monate | reduziert | Ratenzahlung", price: 630 },
+  { name: "Striking Pro 1 Jahr | Ratenzahlung", price: 1645 },
+  { name: "MMA 1 Jahr | reduziert | Ratenzahlung", price: 1285 },
+  { name: "Striking Pro 6 Monate | Ratenzahlung", price: 1245 },
+  { name: "Fit & Athletik 1 Jahr | reduziert | Ratenzahlung", price: 920 },
+  { name: "Striking Pro 1 Jahr | reduziert | monatlich", price: 1500 },
+  { name: "Striking Pro 6 Monate", price: 1245 },
+  { name: "Grappling Pro 1 Jahr | reduziert", price: 1245 },
+  { name: "Striking Pro 1 Jahr | reduziert | Ratenzahlung", price: 1390 },
+  { name: "Fit & Athletik 6 Monate | Ratenzahlung", price: 740 },
+  { name: "Grappling Pro 6 Monate | Ratenzahlung", price: 935 },
+  { name: "MTT - Medizinische Trainingstherapie", price: 50 },
+  { name: "Grappling Pro 6 Monate | reduziert | Ratenzahlung", price: 830 },
+  { name: "Striking Pro 1 Jahr | reduziert", price: 1390 },
+  { name: "Striking Pro 1 Jahr | Legacy", price: 1645 },
+  { name: "Striking Pro 6 Monate | reduziert", price: 1115 },
+  { name: "Eltern Kinder 1 Jahr | Ratenzahlung", price: 1160 },
+  { name: "Kinder & Jugendliche 1 Jahr | Ratenzahlung", price: 720 },
+  { name: "Kinder & Jugendliche 1 Jahr", price: 720 },
+  { name: "Kinder & Jugendliche 6 Monate | Ratenzahlung", price: 490 },
+  { name: "Athlete - Advanced Package Standart", price: 255 },
+  { name: "1x Single Personal Training", price: 150 },
+  { name: "Next Level Intense Personal Training | monatlich", price: 800 },
+  { name: "Athlete - Advanced Package Pro", price: 350 },
+  { name: "Grappling 1 Jahr | reduziert | Ratenzahlung", price: 850 },
+  { name: "Striking 6 Monate | reduziert", price: 720 },
+  { name: "BJJ Kids Bullyproof", price: 0 },
+  { name: "Grappling 1 Jahr | Legacy", price: 995 },
+  { name: "EarlyBird 1 Jahr", price: 795 },
+  { name: "EarlyBird 6 Monate", price: 565 },
+  { name: "MMA 6 Monate | reduziert", price: 845 },
+  { name: "MMA Pro 1 Jahr | reduziert", price: 1680 },
+  { name: "Striking Pro 1 Jahr", price: 1645 },
+  { name: "Grappling 1 Jahr reduziert | Legacy", price: 850 },
+  { name: "Striking 1 Jahr | reduziert | monatlich", price: 1080 },
+  { name: "Goal Getter Intense Personal Training | monatlich", price: 240 },
+  { name: "Eltern Kinder 1 Jahr", price: 1160 },
+  { name: "Striking 6 Monate | Legacy", price: 850 },
+];
+
+const subscriptionPrices2025: SubscriptionPrice[] = [
   { name: "Mitarbeiter", price: 0 },
   { name: "Striking 1 Jahr | reduziert | Ratenzahlung", price: 970 },
   { name: "Striking 1 Jahr | Ratenzahlung", price: 1145 },
@@ -381,6 +508,7 @@ const error = ref("");
 const selectedFiles = ref<FileList | null>(null);
 const selectedYears = ref<number[]>([]);
 const selectedTableFilter = ref("All");
+const selectedPricing = ref<"2025" | "2026">("2026");
 
 const subscriptionCategories = [
   "Striking",
@@ -417,7 +545,7 @@ const parseExcelDate = (date: any): Date | null => {
         const parsedDate = new Date(
           parseInt(year),
           parseInt(month) - 1,
-          parseInt(day)
+          parseInt(day),
         );
 
         return isValidDate(parsedDate) ? parsedDate : null;
@@ -429,6 +557,12 @@ const parseExcelDate = (date: any): Date | null => {
 
   return null;
 };
+
+const activeSubscriptionPrices = computed(() => {
+  return selectedPricing.value === "2025"
+    ? subscriptionPrices2025
+    : subscriptionPrices2026;
+});
 
 const availableYears = computed(() => {
   if (datasets.value.length === 0) return [];
@@ -454,7 +588,7 @@ const toggleYear = (year: number) => {
 const filteredDatasets = computed(() => {
   if (selectedYears.value.length === 0) return datasets.value;
   return datasets.value.filter((ds) =>
-    selectedYears.value.includes(getYear(ds.timestamp))
+    selectedYears.value.includes(getYear(ds.timestamp)),
   );
 });
 
@@ -462,7 +596,7 @@ const isRelevantSubscription = (subscription: string): boolean => {
   if (subscription.toLowerCase().includes("probetraining")) return false;
   const type = getSubscriptionType(subscription);
   return ["Striking", "Grappling", "MMA", "Fit & Athletik", "Kinder"].includes(
-    type
+    type,
   );
 };
 
@@ -488,31 +622,32 @@ const getSubscriptionType = (subscription: string): string => {
 const getSubscriptionPrice = (subscription: string): number => {
   const normalizedSubscription = subscription.toLowerCase().trim();
 
-  // Try exact match first
-  const exactMatch = subscriptionPrices.find(
-    (price) => price.name.toLowerCase() === normalizedSubscription
+  const prices = activeSubscriptionPrices.value;
+
+  // Exact match first
+  const exactMatch = prices.find(
+    (price) => price.name.toLowerCase().trim() === normalizedSubscription,
   );
   if (exactMatch) return exactMatch.price;
 
-  // Try fuzzy matching
-  const matchingPrices = subscriptionPrices.filter((price) => {
-    const priceName = price.name.toLowerCase();
+  // Fuzzy matching
+  const matchingPrices = prices.filter((price) => {
+    const priceName = price.name.toLowerCase().trim();
 
-    // Extract main type (Striking, Grappling, MMA, etc.)
     const mainType = priceName.split(" ")[0];
     if (!normalizedSubscription.includes(mainType)) return false;
 
-    // Check duration
     const hasYear =
       priceName.includes("jahr") === normalizedSubscription.includes("jahr");
+
     const hasMonth =
       priceName.includes("monate") ===
       normalizedSubscription.includes("monate");
 
-    // Check modifiers
     const hasReduced =
       priceName.includes("reduziert") ===
       normalizedSubscription.includes("reduziert");
+
     const hasPro =
       priceName.includes("pro") === normalizedSubscription.includes("pro");
 
@@ -520,37 +655,35 @@ const getSubscriptionPrice = (subscription: string): number => {
   });
 
   if (matchingPrices.length > 0) {
-    // Sort by price to get the closest match
     matchingPrices.sort((a, b) => {
       const aSimilarity = a.name
         .toLowerCase()
         .split(" ")
         .filter((word) => normalizedSubscription.includes(word)).length;
+
       const bSimilarity = b.name
         .toLowerCase()
         .split(" ")
         .filter((word) => normalizedSubscription.includes(word)).length;
+
       return bSimilarity - aSimilarity;
     });
+
     return matchingPrices[0].price;
   }
 
-  // Fallback prices for special cases
+  // Fallback prices
   if (normalizedSubscription.includes("kinder")) {
-    const kinderPrice = subscriptionPrices.find((p) =>
-      p.name.includes("Kinder")
-    );
-    return kinderPrice ? kinderPrice.price : 490.0;
+    const kinderPrice = prices.find((p) => p.name.includes("Kinder"));
+    return kinderPrice ? kinderPrice.price : 490;
   }
 
   if (
     normalizedSubscription.includes("fit") ||
     normalizedSubscription.includes("athletik")
   ) {
-    const fitPrice = subscriptionPrices.find((p) =>
-      p.name.includes("Fit & Athletik")
-    );
-    return fitPrice ? fitPrice.price : 740.0;
+    const fitPrice = prices.find((p) => p.name.includes("Fit & Athletik"));
+    return fitPrice ? fitPrice.price : 740;
   }
 
   console.log("No price match found for subscription:", subscription);
@@ -563,7 +696,7 @@ const totalCustomers = computed(() => {
   const latestDataset =
     filteredDatasets.value[filteredDatasets.value.length - 1];
   return latestDataset.customers.filter((customer) =>
-    isRelevantSubscription(customer.subscription)
+    isRelevantSubscription(customer.subscription),
   ).length;
 });
 
@@ -578,7 +711,7 @@ const subscriptionChartData = computed(() => {
     return latestDataset.customers.filter(
       (c) =>
         !c.subscription.toLowerCase().includes("probetraining") &&
-        getSubscriptionType(c.subscription) === category
+        getSubscriptionType(c.subscription) === category,
     ).length;
   });
 
@@ -605,9 +738,9 @@ const subscriptionBarData = computed(() => ({
             ].customers.filter(
               (c) =>
                 !c.subscription.toLowerCase().includes("probetraining") &&
-                getSubscriptionType(c.subscription) === category
+                getSubscriptionType(c.subscription) === category,
             ).length
-          : 0
+          : 0,
       ),
       backgroundColor: colorPalette,
     },
@@ -641,13 +774,13 @@ const allSubscriptionsRevenueData = computed(() => {
   });
 
   const sortedEntries = Array.from(subscriptionCounts.entries()).sort(
-    (a, b) => b[1].revenue - a[1].revenue
+    (a, b) => b[1].revenue - a[1].revenue,
   );
 
   const labels = sortedEntries.map(([label]) => label);
   const data = sortedEntries.map(([, value]) => value.revenue);
   const backgroundColor = labels.map(
-    (_, i) => colorPalette[i % colorPalette.length]
+    (_, i) => colorPalette[i % colorPalette.length],
   );
 
   return {
@@ -668,13 +801,6 @@ const relevantTypesRevenueData = computed(() => {
 
   const latestDataset =
     filteredDatasets.value[filteredDatasets.value.length - 1];
-  const relevantTypes = [
-    "Striking",
-    "Grappling",
-    "MMA",
-    "Fit & Athletik",
-    "Kinder",
-  ];
   const typeData = new Map<string, { count: number; revenue: number }>();
 
   relevantTypes.forEach((type) => {
@@ -699,22 +825,22 @@ const relevantTypesRevenueData = computed(() => {
   // Gesamtumsatz berechnen
   const totalRevenue = Array.from(typeData.values()).reduce(
     (sum, t) => sum + t.revenue,
-    0
+    0,
   );
 
   const sortedEntries = Array.from(typeData.entries()).sort(
-    (a, b) => b[1].revenue - a[1].revenue
+    (a, b) => b[1].revenue - a[1].revenue,
   );
 
   const labels = sortedEntries.map(([label]) => label);
   const data = sortedEntries.map(([, value]) => value.revenue);
   const backgroundColor = labels.map(
-    (_, i) => colorPalette[i % colorPalette.length]
+    (_, i) => colorPalette[i % colorPalette.length],
   );
 
   // Prozentwerte berechnen
   const percentages = sortedEntries.map(
-    ([, value]) => ((value.revenue / totalRevenue) * 100).toFixed(2) + "%"
+    ([, value]) => ((value.revenue / totalRevenue) * 100).toFixed(2) + "%",
   );
 
   return {
@@ -733,7 +859,7 @@ const subscriptionGrowthData = computed(() => {
   if (filteredDatasets.value.length === 0) return { labels: [], datasets: [] };
 
   const sortedDatasets = [...filteredDatasets.value].sort(
-    (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+    (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
   );
 
   const labels = sortedDatasets.map((ds) => format(ds.timestamp, "MMM yyyy"));
@@ -745,8 +871,8 @@ const subscriptionGrowthData = computed(() => {
         ds.customers.filter(
           (c) =>
             !c.subscription.toLowerCase().includes("probetraining") &&
-            getSubscriptionType(c.subscription) === category
-        ).length
+            getSubscriptionType(c.subscription) === category,
+        ).length,
     ),
     borderColor: colorPalette[index % colorPalette.length],
     backgroundColor: colorPalette[index % colorPalette.length],
@@ -764,7 +890,7 @@ const subscriptionGrowthData = computed(() => {
             subscriptionLower.includes("pro") &&
             !subscriptionLower.includes("probetraining")
           );
-        }).length
+        }).length,
     ),
     borderColor: "#ff4444",
     backgroundColor: "#ff4444",
@@ -776,7 +902,7 @@ const subscriptionGrowthData = computed(() => {
     data: sortedDatasets.map(
       (ds) =>
         ds.customers.filter((c) => isRelevantSubscription(c.subscription))
-          .length
+          .length,
     ),
     borderColor: "#1a519b",
     backgroundColor: "#1a519b",
@@ -794,7 +920,7 @@ const probetrainingData = computed(() => {
   if (filteredDatasets.value.length === 0) return { labels: [], datasets: [] };
 
   const sortedDatasets = [...filteredDatasets.value].sort(
-    (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+    (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
   );
 
   const labels = sortedDatasets.map((ds) => format(ds.timestamp, "MMM yyyy"));
@@ -875,7 +1001,7 @@ const conversionChartData = computed(() => {
 
   // Schritt 3: Labels sortieren
   const sortedLabels = Array.from(conversionMap.keys()).sort(
-    (a, b) => new Date(a).getTime() - new Date(b).getTime()
+    (a, b) => new Date(a).getTime() - new Date(b).getTime(),
   );
 
   // Schritt 4: Daten für jedes Typ-Label kombinieren
@@ -902,7 +1028,7 @@ const specialTrainingData = computed(() => {
   if (filteredDatasets.value.length === 0) return { labels: [], datasets: [] };
 
   const sortedDatasets = [...filteredDatasets.value].sort(
-    (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+    (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
   );
 
   const labels = sortedDatasets.map((ds) => format(ds.timestamp, "MMM yyyy"));
@@ -920,7 +1046,7 @@ const specialTrainingData = computed(() => {
                 subscriptionLower.includes("athlete") &&
                 subscriptionLower.includes("package")
               );
-            }).length
+            }).length,
         ),
         borderColor: "#1a519b",
         backgroundColor: "#1a519b",
@@ -936,7 +1062,7 @@ const specialTrainingData = computed(() => {
                 subscriptionLower.includes("personal") &&
                 subscriptionLower.includes("training")
               );
-            }).length
+            }).length,
         ),
         borderColor: "#5a91db",
         backgroundColor: "#5a91db",
@@ -949,7 +1075,7 @@ const specialTrainingData = computed(() => {
             ds.customers.filter((c) => {
               const subscriptionLower = c.subscription.toLowerCase();
               return subscriptionLower.includes("nutrition");
-            }).length
+            }).length,
         ),
         borderColor: "#7ab1fb",
         backgroundColor: "#7ab1fb",
@@ -985,7 +1111,7 @@ const renewalForecastData = computed(() => {
   });
 
   const sortedEntries = Array.from(renewalMap.entries()).sort(
-    ([a], [b]) => new Date(a).getTime() - new Date(b).getTime()
+    ([a], [b]) => new Date(a).getTime() - new Date(b).getTime(),
   );
 
   const labels = sortedEntries.map(([label]) => label);
@@ -1014,7 +1140,7 @@ const cancellationsByMonth = computed(() => {
       const subscriptionType = getSubscriptionType(subscription);
       if (
         !["Striking", "Grappling", "Fit & Athletik", "MMA", "Kinder"].includes(
-          subscriptionType
+          subscriptionType,
         )
       )
         continue;
@@ -1032,7 +1158,7 @@ const cancellationsByMonth = computed(() => {
         const parsed = new Date(
           parseInt(year),
           parseInt(month) - 1,
-          parseInt(day)
+          parseInt(day),
         );
         const label = format(parsed, "MMM yyyy");
 
@@ -1043,7 +1169,7 @@ const cancellationsByMonth = computed(() => {
   }
 
   const sortedEntries = Array.from(cancellationMap.entries()).sort(
-    ([a], [b]) => new Date(a).getTime() - new Date(b).getTime()
+    ([a], [b]) => new Date(a).getTime() - new Date(b).getTime(),
   );
 
   return {
@@ -1061,47 +1187,74 @@ const cancellationsByMonth = computed(() => {
 const cancellationsExpiringByMonth = computed(() => {
   const expiryMap = new Map<string, number>();
 
+  // Step 1: Indexiere alle Abos pro Kunde
+  const futureSubscriptions = new Map<string, Date[]>();
+
+  for (const dataset of filteredDatasets.value) {
+    for (const customer of dataset.customers) {
+      const email = customer.email || customer.name;
+      const type = getSubscriptionType(customer.subscription || "");
+      const validFrom = customer.validFrom;
+
+      if (!relevantTypes.includes(type)) continue;
+      if (!isValidDate(validFrom)) continue;
+
+      const key = `${email}-${type}`;
+
+      if (!futureSubscriptions.has(key)) {
+        futureSubscriptions.set(key, []);
+      }
+      futureSubscriptions.get(key)!.push(validFrom);
+    }
+  }
+
+  // Step 2: Sortiere alle Dates
+  for (const [_, dates] of futureSubscriptions) {
+    dates.sort((a, b) => a.getTime() - b.getTime());
+  }
+
+  // Step 3: Prüfe Kündigungen
   for (const dataset of filteredDatasets.value) {
     for (const customer of dataset.customers) {
       const status = (customer.subscriptionStatus || "").toLowerCase();
       const subscription = customer.subscription || "";
       const validUntil = customer.validUntil;
+      const type = getSubscriptionType(subscription);
+      const email = customer.email || customer.name;
 
-      const subscriptionType = getSubscriptionType(subscription);
-      if (
-        !["Striking", "Grappling", "Fit & Athletik", "MMA", "Kinder"].includes(
-          subscriptionType
-        )
-      )
-        continue;
-
+      if (!relevantTypes.includes(type)) continue;
       if (
         selectedCancellationFilter.value !== "All" &&
-        subscriptionType !== selectedCancellationFilter.value
+        type !== selectedCancellationFilter.value
       )
         continue;
 
       const isCancelled = status.includes("gekündigt am");
       if (!isCancelled || !isValidDate(validUntil)) continue;
 
-      const label = format(validUntil!, "MMM yyyy");
+      const key = `${email}-${type}`;
+      const futureStarts = futureSubscriptions.get(key) || [];
 
-      if (!expiryMap.has(label)) expiryMap.set(label, 0);
-      expiryMap.set(label, expiryMap.get(label)! + 1);
+      const hasFollowUp = futureStarts.some((start) => start > validUntil);
+      if (!hasFollowUp) {
+        const label = format(validUntil, "MMM yyyy");
+        if (!expiryMap.has(label)) expiryMap.set(label, 0);
+        expiryMap.set(label, expiryMap.get(label)! + 1);
+      }
     }
   }
 
   const sortedEntries = Array.from(expiryMap.entries()).sort(
-    ([a], [b]) => new Date(a).getTime() - new Date(b).getTime()
+    ([a], [b]) => new Date(a).getTime() - new Date(b).getTime(),
   );
 
   return {
     labels: sortedEntries.map(([label]) => label),
     datasets: [
       {
-        label: "Kündigungen (Ablaufdatum)",
+        label: "Kündigungen (Ablaufdatum, ohne neues Abo)",
         data: sortedEntries.map(([, count]) => count),
-        backgroundColor: "#ffa500", // Orange für Unterscheidung
+        backgroundColor: "#ffa500",
       },
     ],
   };
@@ -1231,6 +1384,32 @@ const barChartOptions = {
       },
       ticks: {
         color: "#1a519b",
+      },
+    },
+  },
+};
+
+const stackedChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: {
+    legend: {
+      display: true,
+    },
+    tooltip: {
+      mode: "index",
+      intersect: false,
+    },
+  },
+  scales: {
+    x: {
+      stacked: true,
+    },
+    y: {
+      stacked: true,
+      beginAtZero: true,
+      ticks: {
+        stepSize: 1,
       },
     },
   },
@@ -1368,7 +1547,7 @@ const processFiles = async () => {
     }
 
     datasets.value.sort(
-      (a, b) => a.timestamp.getTime() - b.timestamp.getTime()
+      (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
     );
     initializeYearFilter();
   } catch (err: any) {
@@ -1403,6 +1582,25 @@ const processFiles = async () => {
   margin: 0 auto;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+}
+
+.settings-dropdown {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: bold;
+  color: #1a519b;
+}
+
+.settings-dropdown select {
+  padding: 8px 12px;
+  border: 2px solid #1a519b;
+  border-radius: 4px;
+  background: white;
+  color: #1a519b;
+  font-weight: bold;
+  cursor: pointer;
 }
 
 h1 {
