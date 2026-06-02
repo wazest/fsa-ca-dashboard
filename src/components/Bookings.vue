@@ -70,6 +70,13 @@
             <Bar :data="averageBookingsChartData" :options="chartOptions" />
           </div>
         </div>
+
+        <div class="chart-wrapper wide-chart">
+          <h3>Bookings by Time Slot</h3>
+          <div class="chart">
+            <Bar :data="bookingsByTimeChartData" :options="chartOptions" />
+          </div>
+        </div>
       </div>
 
       <div v-if="bookingData.length > 0" class="stats-container">
@@ -324,6 +331,54 @@ const classAverages = computed(() => {
       if (a.time !== b.time) return a.time.localeCompare(b.time);
       return a.className.localeCompare(b.className);
     });
+});
+
+const bookingsByTimeChartData = computed(() => {
+  const timeMap = new Map<
+    string,
+    {
+      totalAttendance: number;
+      count: number;
+    }
+  >();
+
+  bookingData.value
+    .filter((booking) => matchesFilter(booking.className))
+    .forEach((booking) => {
+      const time = booking.time;
+
+      if (!timeMap.has(time)) {
+        timeMap.set(time, {
+          totalAttendance: 0,
+          count: 0,
+        });
+      }
+
+      const current = timeMap.get(time)!;
+
+      current.totalAttendance += booking.averageAttendance;
+      current.count += 1;
+    });
+
+  const sortedEntries = Array.from(timeMap.entries())
+    .map(([time, data]) => ({
+      time,
+      average: Math.round((data.totalAttendance / data.count) * 10) / 10,
+    }))
+    .sort((a, b) => a.time.localeCompare(b.time));
+
+  return {
+    labels: sortedEntries.map((e) => e.time),
+    datasets: [
+      {
+        label: "Average Bookings",
+        data: sortedEntries.map((e) => e.average),
+        backgroundColor: sortedEntries.map(
+          (_, i) => colorPalette[i % colorPalette.length],
+        ),
+      },
+    ],
+  };
 });
 
 const totalBookings = computed(() => {
