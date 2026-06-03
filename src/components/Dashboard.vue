@@ -86,6 +86,14 @@
             <h3>Upgrade Funnel: Normal vs Pro</h3>
             <Bar :data="upgradeFunnelData" :options="stackedChartOptions" />
           </div>
+          <div class="chart">
+            <h3>Salutation Distribution</h3>
+            <Pie :data="salutationDistributionData" :options="chartOptions" />
+          </div>
+          <div class="chart">
+            <h3>Age Group Distribution</h3>
+            <Bar :data="ageGroupDistributionData" :options="barChartOptions" />
+          </div>
           <div class="chart wide-chart">
             <h3>Current Subscriptions Revenue</h3>
             <Bar
@@ -915,6 +923,38 @@ const getSubscriptionDuration = (subscription: string): string => {
   return "Other";
 };
 
+const getAge = (birthday: Date | null): number | null => {
+  if (!birthday || !isValidDate(birthday)) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - birthday.getFullYear();
+
+  const hasHadBirthdayThisYear =
+    today.getMonth() > birthday.getMonth() ||
+    (today.getMonth() === birthday.getMonth() &&
+      today.getDate() >= birthday.getDate());
+
+  if (!hasHadBirthdayThisYear) {
+    age -= 1;
+  }
+
+  return age;
+};
+
+const getAgeGroup = (age: number | null): string => {
+  if (age === null) return "Unknown";
+
+  if (age < 13) return "Under 13";
+  if (age < 18) return "13–17";
+  if (age < 25) return "18–24";
+  if (age < 35) return "25–34";
+  if (age < 45) return "35–44";
+  if (age < 55) return "45–54";
+  if (age < 65) return "55–64";
+
+  return "65+";
+};
+
 const subscriptionDurationData = computed(() => {
   if (filteredDatasets.value.length === 0)
     return { labels: [], datasets: [{ data: [] }] };
@@ -1270,6 +1310,95 @@ const upgradeFunnelData = computed(() => {
         label: "Pro",
         data: sortedEntries.map(([, data]) => data.pro),
         backgroundColor: "#1a519b",
+      },
+    ],
+  };
+});
+
+const salutationDistributionData = computed(() => {
+  if (filteredDatasets.value.length === 0)
+    return { labels: [], datasets: [{ data: [] }] };
+
+  const latestDataset =
+    filteredDatasets.value[filteredDatasets.value.length - 1];
+
+  const salutationMap = new Map<string, number>();
+
+  latestDataset.customers
+    .filter((customer) => isRelevantSubscription(customer.subscription))
+    .forEach((customer) => {
+      const salutation = (customer.salutation || "").trim();
+
+      const label =
+        salutation === "Herr"
+          ? "Male"
+          : salutation === "Frau"
+            ? "Female"
+            : "Other / Unknown";
+
+      salutationMap.set(label, (salutationMap.get(label) || 0) + 1);
+    });
+
+  const sortedEntries = Array.from(salutationMap.entries()).sort(
+    (a, b) => b[1] - a[1],
+  );
+
+  return {
+    labels: sortedEntries.map(([label]) => label),
+    datasets: [
+      {
+        data: sortedEntries.map(([, count]) => count),
+        backgroundColor: sortedEntries.map(
+          (_, i) => colorPalette[i % colorPalette.length],
+        ),
+      },
+    ],
+  };
+});
+
+const ageGroupDistributionData = computed(() => {
+  if (filteredDatasets.value.length === 0)
+    return { labels: [], datasets: [{ data: [] }] };
+
+  const latestDataset =
+    filteredDatasets.value[filteredDatasets.value.length - 1];
+
+  const ageGroupMap = new Map<string, number>();
+
+  const preferredOrder = [
+    "Under 13",
+    "13–17",
+    "18–24",
+    "25–34",
+    "35–44",
+    "45–54",
+    "55–64",
+    "65+",
+    "Unknown",
+  ];
+
+  latestDataset.customers
+    .filter((customer) => isRelevantSubscription(customer.subscription))
+    .forEach((customer) => {
+      const age = getAge(customer.birthday);
+      const group = getAgeGroup(age);
+
+      ageGroupMap.set(group, (ageGroupMap.get(group) || 0) + 1);
+    });
+
+  const sortedEntries = Array.from(ageGroupMap.entries()).sort(
+    ([a], [b]) => preferredOrder.indexOf(a) - preferredOrder.indexOf(b),
+  );
+
+  return {
+    labels: sortedEntries.map(([label]) => label),
+    datasets: [
+      {
+        label: "Customers",
+        data: sortedEntries.map(([, count]) => count),
+        backgroundColor: sortedEntries.map(
+          (_, i) => colorPalette[i % colorPalette.length],
+        ),
       },
     ],
   };
