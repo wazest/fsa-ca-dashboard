@@ -277,6 +277,7 @@ import {
 import { Pie, Bar, Line } from "vue-chartjs";
 import { parse, format, getYear } from "date-fns";
 import * as XLSX from "xlsx";
+import { useDashboardStore } from "../stores/dashboardStore";
 
 ChartJS.register(
   ArcElement,
@@ -289,6 +290,14 @@ ChartJS.register(
   PointElement,
   Title,
 );
+
+// --- Store ---
+const store = useDashboardStore();
+
+// Destructure store state (bleibt reaktiv via store.xxx)
+const processing = ref(false);
+const error = ref("");
+const selectedFiles = ref<FileList | null>(null);
 
 interface Customer {
   id: string;
@@ -551,15 +560,37 @@ const subscriptionPrices2025: SubscriptionPrice[] = [
   { name: "Striking 6 Monate | Legacy", price: 775 },
 ];
 
-const datasets = ref<DataSet[]>([]);
-const processing = ref(false);
-const error = ref("");
-const selectedFiles = ref<FileList | null>(null);
-const selectedYears = ref<number[]>([]);
-const selectedTableFilter = ref("All");
-const selectedPricing = ref<"2025" | "2026">("2026");
-const compareToPreviousYear = ref(false);
-const selectedCancellationFilter = ref("All");
+const datasets = computed(() => store.datasets);
+const selectedYears = computed({
+  get: () => store.selectedYears,
+  set: (v) => {
+    store.selectedYears = v;
+  },
+});
+const selectedTableFilter = computed({
+  get: () => store.selectedTableFilter,
+  set: (v) => {
+    store.selectedTableFilter = v;
+  },
+});
+const selectedPricing = computed({
+  get: () => store.selectedPricing,
+  set: (v) => {
+    store.selectedPricing = v;
+  },
+});
+const compareToPreviousYear = computed({
+  get: () => store.compareToPreviousYear,
+  set: (v) => {
+    store.compareToPreviousYear = v;
+  },
+});
+const selectedCancellationFilter = computed({
+  get: () => store.selectedCancellationFilter,
+  set: (v) => {
+    store.selectedCancellationFilter = v;
+  },
+});
 
 const subscriptionCategories = [
   "Striking",
@@ -613,11 +644,7 @@ const activeSubscriptionPrices = computed(() => {
     : subscriptionPrices2026;
 });
 
-const availableYears = computed(() => {
-  if (datasets.value.length === 0) return [];
-  const years = new Set(datasets.value.map((ds) => getYear(ds.timestamp)));
-  return Array.from(years).sort((a, b) => b - a);
-});
+const availableYears = computed(() => store.availableYears);
 
 const initializeYearFilter = () => {
   if (availableYears.value.length > 0) {
@@ -625,19 +652,13 @@ const initializeYearFilter = () => {
   }
 };
 
-const toggleYear = (year: number) => {
-  const index = selectedYears.value.indexOf(year);
-  if (index === -1) {
-    selectedYears.value.push(year);
-  } else {
-    selectedYears.value.splice(index, 1);
-  }
-};
+const toggleYear = (year: number) => store.toggleYear(year);
 
+// filteredDatasets – unveränderte Logik, liest jetzt aus store
 const filteredDatasets = computed(() => {
-  if (selectedYears.value.length === 0) return datasets.value;
-  return datasets.value.filter((ds) =>
-    selectedYears.value.includes(getYear(ds.timestamp)),
+  if (store.selectedYears.length === 0) return store.datasets;
+  return store.datasets.filter((ds) =>
+    store.selectedYears.includes(getYear(ds.timestamp)),
   );
 });
 
@@ -2077,30 +2098,20 @@ const handleFileUpload = (event: Event) => {
 
 const processFiles = async () => {
   if (!selectedFiles.value?.length) return;
-
   processing.value = true;
   error.value = "";
 
   try {
+    const newDatasets = [];
+
     for (const file of Array.from(selectedFiles.value)) {
       const timestamp = extractTimestampFromFilename(file.name);
       const arrayBuffer = await file.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer);
-
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const rawData = XLSX.utils.sheet_to_json(worksheet);
 
       const customers = rawData.map((row: any) => {
-        if ((row.Abonnement || "").toLowerCase().includes("probetraining")) {
-          console.log("Raw trial training row:", {
-            subscription: row.Abonnement,
-            validFrom: row["Gültig ab"],
-            validUntil: row["Gültig bis"],
-          });
-        }
-
         const validFrom = parseExcelDate(row["Gültig ab"]);
         const validUntil = parseExcelDate(row["Gültig bis"]);
         const purchaseDate = parseExcelDate(row["Kaufdatum"]);
@@ -2111,8 +2122,9 @@ const processFiles = async () => {
           subscription: row.Abonnement || "",
           validFrom,
           validUntil,
-          pendingBookings: parseInt(row["Ausstehende Buchungen"] || "0"),
           purchaseDate,
+          birthday,
+          pendingBookings: parseInt(row["Ausstehende Buchungen"] || "0"),
           subscriptionStatus: row["Abonnement-Status"] || "",
           customer: row.Kunde || "",
           salutation: row.Anrede || "",
@@ -2124,25 +2136,18 @@ const processFiles = async () => {
           mobile: row.Mobiltelefon || "",
           phonePrivate: row["Telefon Privat"] || "",
           phoneWork: row["Telefon Arbeit"] || "",
-          birthday,
           email: row["E-Mail"] || "",
           language: row.Sprache || "",
         };
       });
 
-      datasets.value.push({
-        timestamp,
-        customers,
-      });
+      newDatasets.push({ timestamp, customers });
     }
 
-    datasets.value.sort(
-      (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
-    );
-    initializeYearFilter();
+    store.addDatasets(newDatasets); // ← Store statt lokalem ref
+    store.initializeYearFilter();
   } catch (err: any) {
     error.value = err.message;
-    console.error("Error processing files:", err);
   } finally {
     processing.value = false;
     selectedFiles.value = null;
