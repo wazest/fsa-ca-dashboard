@@ -284,7 +284,7 @@
         <section class="section">
           <h2 class="section-title">Trends</h2>
 
-          <div class="chart-wrapper wide-chart">
+          <!--<div class="chart-wrapper wide-chart">
             <h3>Annullierungen pro Monat (Abo-Wechsel vs. Echt)</h3>
             <div class="chart">
               <Bar
@@ -292,7 +292,7 @@
                 :options="stackedMoneyChartOptions"
               />
             </div>
-          </div>
+          </div>-->
 
           <div class="chart-wrapper wide-chart">
             <h3>Status pro Erstellungsmonat</h3>
