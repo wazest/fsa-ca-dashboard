@@ -80,6 +80,7 @@ import {
 import { Pie, Bar } from "vue-chartjs";
 import * as XLSX from "xlsx";
 import { format, parse } from "date-fns";
+import { useFinanceStore } from "../stores/financeStore";
 
 ChartJS.register(
   ArcElement,
@@ -87,7 +88,7 @@ ChartJS.register(
   Legend,
   CategoryScale,
   LinearScale,
-  BarElement
+  BarElement,
 );
 
 interface Invoice {
@@ -96,10 +97,15 @@ interface Invoice {
   zahlbarBis: Date | null;
 }
 
+// --- Store ---
+const store = useFinanceStore();
+
 const selectedFiles = ref<FileList | null>(null);
 const processing = ref(false);
 const error = ref("");
-const invoiceData = ref<Invoice[]>([]);
+
+// Liest direkt aus dem Store – bleibt beim Seitenwechsel erhalten
+const invoiceData = computed(() => store.invoiceData);
 
 const colorPalette = [
   "#1a519b", // Primary blue
@@ -126,7 +132,7 @@ const parseExcelDate = (date: any): Date | null => {
         const parsedDate = new Date(
           parseInt(year),
           parseInt(month) - 1,
-          parseInt(day)
+          parseInt(day),
         );
         return isValidDate(parsedDate) ? parsedDate : null;
       }
@@ -176,14 +182,14 @@ const statusData = computed(() => {
 const totalInvoices = computed(() => {
   return Object.values(statusData.value).reduce(
     (sum, data) => sum + data.count,
-    0
+    0,
   );
 });
 
 const totalAmount = computed(() => {
   return Object.values(statusData.value).reduce(
     (sum, data) => sum + data.amount,
-    0
+    0,
   );
 });
 
@@ -207,7 +213,7 @@ const monthlyOutstandingData = computed(() => {
       const monthKey = format(invoice.zahlbarBis, "MMM yyyy");
       monthlyData.set(
         monthKey,
-        (monthlyData.get(monthKey) || 0) + invoice.total
+        (monthlyData.get(monthKey) || 0) + invoice.total,
       );
     }
   });
@@ -253,7 +259,7 @@ const chartOptions = {
           const count = statusData.value[status].count;
           const total = Object.values(statusData.value).reduce(
             (sum, data) => sum + data.amount,
-            0
+            0,
           );
           const percentage = ((amount / total) * 100).toFixed(1);
           return [
@@ -299,37 +305,26 @@ const handleFileUpload = (event: Event) => {
 
 const processFiles = async () => {
   if (!selectedFiles.value?.length) return;
-
   processing.value = true;
   error.value = "";
-  invoiceData.value = [];
 
   try {
     for (const file of Array.from(selectedFiles.value)) {
       const arrayBuffer = await file.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer);
-
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const rawData = XLSX.utils.sheet_to_json(worksheet);
 
-      const processedData = rawData.map((row: any) => {
-        // Log the row data to see the actual column names
-        console.log("Raw row data:", row);
+      const processedData = rawData.map((row: any) => ({
+        rechnungsstatus: row["Rechnungsstatus"] || "",
+        total: parseFloat(row["Total"] || 0),
+        zahlbarBis: parseExcelDate(row["Zahlbar bis"]),
+      }));
 
-        return {
-          rechnungsstatus: row["Rechnungsstatus"] || "",
-          total: parseFloat(row["Total"] || 0),
-          zahlbarBis: parseExcelDate(row["Zahlbar bis"]), // Updated column name
-        };
-      });
-
-      invoiceData.value.push(...processedData);
+      store.addInvoices(processedData); // ← Store statt lokalem ref
     }
   } catch (err: any) {
     error.value = err.message;
-    console.error("Error processing files:", err);
   } finally {
     processing.value = false;
     selectedFiles.value = null;

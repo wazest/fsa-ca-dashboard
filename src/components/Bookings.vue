@@ -120,6 +120,7 @@ import {
 import { Bar } from "vue-chartjs";
 import * as XLSX from "xlsx";
 import { format } from "date-fns";
+import { useBookingsStore, type FilterType } from "../stores/bookingsStore";
 
 ChartJS.register(
   CategoryScale,
@@ -151,11 +152,15 @@ interface ClassAverage {
 
 type FilterType = "all" | "kickboxing" | "bjj" | "athletik";
 
+// --- Store ---
+const store = useBookingsStore();
+
 const selectedFiles = ref<FileList | null>(null);
 const processing = ref(false);
 const error = ref("");
-const bookingData = ref<Booking[]>([]);
-const selectedFilter = ref<FilterType>("all");
+const bookingData = computed(() => store.bookingData);
+const selectedFilter = computed(() => store.selectedFilter);
+const toggleFilter = (filter: FilterType) => store.setFilter(filter);
 
 const colorPalette = [
   "#1a519b",
@@ -217,10 +222,6 @@ const isRelevantClass = (className: string): boolean => {
   ];
 
   return includedKeywords.some((keyword) => lower.includes(keyword));
-};
-
-const toggleFilter = (filter: FilterType) => {
-  selectedFilter.value = filter;
 };
 
 const matchesFilter = (className: string): boolean => {
@@ -470,53 +471,43 @@ const extractTimestampFromFilename = (filename: string): Date => {
 
 const processFiles = async () => {
   if (!selectedFiles.value?.length) return;
-
   processing.value = true;
   error.value = "";
-  bookingData.value = [];
 
   try {
     for (const file of Array.from(selectedFiles.value)) {
       const timestamp = extractTimestampFromFilename(file.name);
       const arrayBuffer = await file.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer);
-
-      const firstSheetName = workbook.SheetNames[0];
-      const worksheet = workbook.Sheets[firstSheetName];
-
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const rawData = XLSX.utils.sheet_to_json(worksheet);
 
       const processedData = rawData
-        .map((row: any) => {
-          return {
-            className: row["Stunde"] || "",
-            weekday: row["Tag"] || "",
-            time: row["Zeit"] || "",
-            averageAttendance: parseFloat(
-              row["Durchschnittliche Teilnehmerzahl"] || "0",
-            ),
-            totalAttendance: parseFloat(row["Teilnehmerzahl total"] || "0"),
-            totalLessons: parseFloat(row["Anzahl Lektionen Total"] || "0"),
-            date: timestamp,
-          };
-        })
+        .map((row: any) => ({
+          className: row["Stunde"] || "",
+          weekday: row["Tag"] || "",
+          time: row["Zeit"] || "",
+          averageAttendance: parseFloat(
+            row["Durchschnittliche Teilnehmerzahl"] || "0",
+          ),
+          totalAttendance: parseFloat(row["Teilnehmerzahl total"] || "0"),
+          totalLessons: parseFloat(row["Anzahl Lektionen Total"] || "0"),
+          date: timestamp,
+        }))
         .filter(
-          (booking): booking is Booking =>
-            booking.className !== "" &&
-            booking.weekday !== "" &&
-            booking.averageAttendance > 0 &&
-            booking.totalAttendance > 0 &&
-            booking.totalLessons > 0 &&
-            isRelevantClass(booking.className),
+          (b) =>
+            b.className !== "" &&
+            b.weekday !== "" &&
+            b.averageAttendance > 0 &&
+            b.totalAttendance > 0 &&
+            b.totalLessons > 0 &&
+            isRelevantClass(b.className),
         );
 
-      bookingData.value.push(...processedData);
+      store.addBookings(processedData); // ← Store statt lokalem ref
     }
-
-    bookingData.value.sort((a, b) => a.date.getTime() - b.date.getTime());
   } catch (err: any) {
     error.value = err.message;
-    console.error("Error processing files:", err);
   } finally {
     processing.value = false;
     selectedFiles.value = null;
