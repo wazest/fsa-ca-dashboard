@@ -184,7 +184,10 @@
           <!-- 💡 Kündigungs-Charts bleiben breit -->
           <div v-if="filteredDatasets.length > 0" class="chart wide-chart">
             <h3>Kündigungen nach Monat (gemäss Kündigungsdatum)</h3>
-            <Bar :data="cancellationsByMonth" :options="barChartOptions" />
+            <Bar
+              :data="cancellationsByMonth"
+              :options="cancellationsChartOptions"
+            />
           </div>
 
           <div v-if="filteredDatasets.length > 0" class="chart wide-chart">
@@ -197,7 +200,52 @@
             />
           </div>
         </div>
-
+        <div
+          v-if="
+            selectedCancellationMonth && cancellationsDrilldownTable.length > 0
+          "
+          class="cancellation-drilldown-card"
+        >
+          <div class="drilldown-header">
+            <h3>
+              Kündigungen im {{ selectedCancellationMonth }} ({{
+                cancellationsDrilldownTable.length
+              }}
+              Abos)
+            </h3>
+            <button
+              @click="selectedCancellationMonth = null"
+              class="close-button"
+            >
+              ✕ Schliessen
+            </button>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Abo-Nr.</th>
+                <th>Abo-Typ</th>
+                <th>Kategorie</th>
+                <th>Kunde</th>
+                <th>Kündigungsdatum</th>
+                <th>Grund</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in cancellationsDrilldownTable"
+                :key="`${row.id}-${row.subscription}`"
+              >
+                <td class="mono">{{ row.id }}</td>
+                <td>{{ row.subscription }}</td>
+                <td>{{ row.type }}</td>
+                <td>{{ row.customerName }}</td>
+                <td>{{ row.cancelDate }}</td>
+                <td>{{ row.reason }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
         <div v-if="filteredDatasets.length > 0" class="subscription-table">
           <h3>Subscription Revenue Overview</h3>
           <div class="table-filters">
@@ -320,6 +368,7 @@ interface Customer {
   birthday: Date | null;
   email: string;
   language: string;
+  cancellationReason: string;
 }
 
 interface DataSet {
@@ -592,6 +641,13 @@ const selectedCancellationFilter = computed({
   },
 });
 
+const selectedCancellationMonth = computed({
+  get: () => store.selectedCancellationMonth,
+  set: (v) => {
+    store.selectedCancellationMonth = v;
+  },
+});
+
 const subscriptionCategories = [
   "Striking",
   "Grappling",
@@ -762,6 +818,14 @@ const getSubscriptionPrice = (subscription: string): number => {
 
   console.log("No price match found for subscription:", subscription);
   return 0;
+};
+
+const parseCancellationDate = (status: string): Date | null => {
+  const match = status.match(/gekündigt am (\d{2}\.\d{2}\.\d{4})/i);
+  if (!match) return null;
+  const [day, month, year] = match[1].split(".");
+  const d = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  return isValidDate(d) ? d : null;
 };
 
 const totalCustomers = computed(() => {
@@ -1742,13 +1806,14 @@ const renewalForecastData = computed(() => {
 
 const cancellationsByMonth = computed(() => {
   const cancellationMap = new Map<string, number>();
+  const seen = new Set<string>();
 
   for (const dataset of filteredDatasets.value) {
     for (const customer of dataset.customers) {
       const status = (customer.subscriptionStatus || "").toLowerCase();
       const subscription = customer.subscription || "";
-
       const subscriptionType = getSubscriptionType(subscription);
+
       if (
         !["Striking", "Grappling", "Fit & Athletik", "MMA", "Kinder"].includes(
           subscriptionType,
@@ -1763,19 +1828,23 @@ const cancellationsByMonth = computed(() => {
         continue;
 
       const match = status.match(/gekündigt am (\d{2}\.\d{2}\.\d{4})/i);
-      if (match) {
-        const rawDate = match[1];
-        const [day, month, year] = rawDate.split(".");
-        const parsed = new Date(
-          parseInt(year),
-          parseInt(month) - 1,
-          parseInt(day),
-        );
-        const label = format(parsed, "MMM yyyy");
+      if (!match) continue;
 
-        if (!cancellationMap.has(label)) cancellationMap.set(label, 0);
-        cancellationMap.set(label, cancellationMap.get(label)! + 1);
-      }
+      // Dedupliziere pro Abo (id + subscription) - selbe Kündigung mehrfach
+      // möglich da Kunde in mehreren Snapshots vorkommt
+      const dedupeKey = `${customer.id}-${subscription}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+
+      const [day, month, year] = match[1].split(".");
+      const parsed = new Date(
+        parseInt(year),
+        parseInt(month) - 1,
+        parseInt(day),
+      );
+      const label = format(parsed, "MMM yyyy");
+
+      cancellationMap.set(label, (cancellationMap.get(label) ?? 0) + 1);
     }
   }
 
@@ -1797,13 +1866,14 @@ const cancellationsByMonth = computed(() => {
 
 const cancellationsExpiringByMonth = computed(() => {
   const expiryMap = new Map<string, number>();
+  const seen = new Set<string>();
 
   // Step 1: Indexiere alle Abos pro Kunde
   const futureSubscriptions = new Map<string, Date[]>();
 
   for (const dataset of filteredDatasets.value) {
     for (const customer of dataset.customers) {
-      const email = customer.email || customer.name;
+      const email = customer.email || customer.id;
       const type = getSubscriptionType(customer.subscription || "");
       const validFrom = customer.validFrom;
 
@@ -1831,7 +1901,7 @@ const cancellationsExpiringByMonth = computed(() => {
       const subscription = customer.subscription || "";
       const validUntil = customer.validUntil;
       const type = getSubscriptionType(subscription);
-      const email = customer.email || customer.name;
+      const email = customer.email || customer.id;
 
       if (!relevantTypes.includes(type)) continue;
       if (
@@ -1843,14 +1913,19 @@ const cancellationsExpiringByMonth = computed(() => {
       const isCancelled = status.includes("gekündigt am");
       if (!isCancelled || !isValidDate(validUntil)) continue;
 
+      // Dedupliziere pro Abo (id + subscription) – Kunde kommt in mehreren
+      // Snapshots vor, soll aber nur einmal gezählt werden
+      const dedupeKey = `${customer.id}-${subscription}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+
       const key = `${email}-${type}`;
       const futureStarts = futureSubscriptions.get(key) || [];
 
       const hasFollowUp = futureStarts.some((start) => start > validUntil);
       if (!hasFollowUp) {
         const label = format(validUntil, "MMM yyyy");
-        if (!expiryMap.has(label)) expiryMap.set(label, 0);
-        expiryMap.set(label, expiryMap.get(label)! + 1);
+        expiryMap.set(label, (expiryMap.get(label) ?? 0) + 1);
       }
     }
   }
@@ -2096,6 +2171,88 @@ const handleFileUpload = (event: Event) => {
   selectedFiles.value = input.files;
 };
 
+const cancellationsChartOptions = {
+  ...barChartOptions,
+  onClick: (_event: any, elements: any[], chart: any) => {
+    if (elements.length === 0) return;
+    const index = elements[0].index;
+    const month = chart.data.labels[index] as string;
+    selectedCancellationMonth.value =
+      selectedCancellationMonth.value === month ? null : month;
+    // DEBUG:
+    setTimeout(() => {
+      console.log("After click:", {
+        selectedMonth: selectedCancellationMonth.value,
+        tableRows: cancellationsDrilldownTable.value.length,
+        sample: cancellationsDrilldownTable.value[0],
+      });
+    }, 0);
+  },
+};
+
+const cancellationsDrilldownTable = computed(() => {
+  if (!selectedCancellationMonth.value) return [];
+
+  const allowedTypes = [
+    "Striking",
+    "Grappling",
+    "Fit & Athletik",
+    "MMA",
+    "Kinder",
+  ];
+  const results: Array<{
+    id: string;
+    subscription: string;
+    type: string;
+    customerName: string;
+    cancelDate: string;
+    reason: string;
+  }> = [];
+  const seen = new Set<string>();
+
+  for (const dataset of filteredDatasets.value) {
+    for (const customer of dataset.customers) {
+      const status = customer.subscriptionStatus || "";
+      const subscription = customer.subscription || "";
+      const type = getSubscriptionType(subscription);
+
+      if (!allowedTypes.includes(type)) continue;
+      if (
+        selectedCancellationFilter.value !== "All" &&
+        type !== selectedCancellationFilter.value
+      )
+        continue;
+
+      const cancelDate = parseCancellationDate(status);
+      if (!cancelDate) continue;
+      if (format(cancelDate, "MMM yyyy") !== selectedCancellationMonth.value)
+        continue;
+
+      const key = `${customer.id}-${subscription}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      results.push({
+        id: customer.id,
+        subscription,
+        type,
+        customerName:
+          `${customer.firstName} ${customer.lastName}`.trim() ||
+          customer.customer ||
+          "—",
+        cancelDate: format(cancelDate, "dd.MM.yyyy"),
+        reason: customer.cancellationReason || "—",
+      });
+    }
+  }
+
+  return results.sort(
+    (a, b) =>
+      a.type.localeCompare(b.type) ||
+      a.subscription.localeCompare(b.subscription),
+  );
+});
+
 const processFiles = async () => {
   if (!selectedFiles.value?.length) return;
   processing.value = true;
@@ -2138,6 +2295,7 @@ const processFiles = async () => {
           phoneWork: row["Telefon Arbeit"] || "",
           email: row["E-Mail"] || "",
           language: row.Sprache || "",
+          cancellationReason: row["Kündigungsgrund"] || "",
         };
       });
 
@@ -2268,6 +2426,65 @@ h3 {
   text-align: center;
   margin-bottom: 20px;
   background: white;
+}
+
+.cancellation-drilldown-card {
+  background: white;
+  padding: 30px;
+  margin-top: 20px;
+  margin-bottom: 30px;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.drilldown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.drilldown-header h3 {
+  color: #1a519b;
+  margin: 0;
+}
+
+.close-button {
+  background: #999;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.close-button:hover {
+  background: #777;
+}
+
+.cancellation-drilldown-card table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0;
+}
+
+.cancellation-drilldown-card th,
+.cancellation-drilldown-card td {
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.cancellation-drilldown-card th {
+  background: #f8f9fa;
+  color: #1a519b;
+  font-weight: bold;
+}
+
+.mono {
+  font-family: monospace;
+  font-size: 0.9rem;
 }
 
 .process-button {
