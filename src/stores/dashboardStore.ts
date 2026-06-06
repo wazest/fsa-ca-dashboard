@@ -23,6 +23,7 @@ export interface Customer {
   birthday: Date | null;
   email: string;
   language: string;
+  cancellationReason: string;
 }
 
 export interface DataSet {
@@ -37,6 +38,7 @@ export const useDashboardStore = defineStore("dashboard", () => {
   const compareToPreviousYear = ref(false);
   const selectedTableFilter = ref("All");
   const selectedCancellationFilter = ref("All");
+  const selectedCancellationMonth = ref<string | null>(null);
 
   const availableYears = computed(() => {
     if (datasets.value.length === 0) return [];
@@ -47,7 +49,6 @@ export const useDashboardStore = defineStore("dashboard", () => {
   const hasData = computed(() => datasets.value.length > 0);
 
   function addDatasets(newDatasets: DataSet[]) {
-    // Deduplicate by timestamp
     for (const ds of newDatasets) {
       const exists = datasets.value.some(
         (existing) => existing.timestamp.getTime() === ds.timestamp.getTime(),
@@ -83,6 +84,7 @@ export const useDashboardStore = defineStore("dashboard", () => {
     compareToPreviousYear.value = false;
     selectedTableFilter.value = "All";
     selectedCancellationFilter.value = "All";
+    selectedCancellationMonth.value = null;
   }
 
   return {
@@ -92,6 +94,7 @@ export const useDashboardStore = defineStore("dashboard", () => {
     compareToPreviousYear,
     selectedTableFilter,
     selectedCancellationFilter,
+    selectedCancellationMonth,
     availableYears,
     hasData,
     addDatasets,
