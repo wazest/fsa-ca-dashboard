@@ -7,9 +7,11 @@ export interface Invoice {
   rechnungsstatus: string;
   total: number;
   betrag: number;
+  mwst: number;
   teilzahlungErhalten: number;
   kaufdatum: Date | null;
   zahlbarBis: Date | null;
+  gueltigBis: Date | null;
   zahlungErhalten: Date | null;
   abonnement: string;
   zahlungsart: string;
@@ -23,6 +25,7 @@ export interface InvoiceSnapshot {
 export const useFinanceStore = defineStore("finance", () => {
   const snapshots = ref<InvoiceSnapshot[]>([]);
   const selectedYears = ref<number[]>([]);
+  const accountingMode = ref(false); // false = Cash-Sicht, true = Buchhaltungs-Sicht
 
   const hasData = computed(() => snapshots.value.length > 0);
 
@@ -31,9 +34,6 @@ export const useFinanceStore = defineStore("finance", () => {
     return snapshots.value[snapshots.value.length - 1];
   });
 
-  /**
-   * Merge all snapshots: newest entry per Rechnungsnummer wins.
-   */
   const mergedInvoices = computed<Invoice[]>(() => {
     const map = new Map<string, Invoice>();
     for (const snap of snapshots.value) {
@@ -46,9 +46,6 @@ export const useFinanceStore = defineStore("finance", () => {
     return Array.from(map.values());
   });
 
-  /**
-   * Available years derived from invoices' Kaufdatum.
-   */
   const availableYears = computed<number[]>(() => {
     const years = new Set<number>();
     for (const inv of mergedInvoices.value) {
@@ -57,9 +54,6 @@ export const useFinanceStore = defineStore("finance", () => {
     return Array.from(years).sort((a, b) => b - a);
   });
 
-  /**
-   * Invoices filtered by selectedYears (filter is by Kaufdatum year).
-   */
   const filteredInvoices = computed<Invoice[]>(() => {
     if (selectedYears.value.length === 0) return mergedInvoices.value;
     return mergedInvoices.value.filter(
@@ -85,7 +79,6 @@ export const useFinanceStore = defineStore("finance", () => {
   }
 
   function initializeYearFilter() {
-    // Default: select all available years on first upload
     if (selectedYears.value.length === 0 && availableYears.value.length > 0) {
       selectedYears.value = [...availableYears.value];
     }
@@ -103,6 +96,7 @@ export const useFinanceStore = defineStore("finance", () => {
   function reset() {
     snapshots.value = [];
     selectedYears.value = [];
+    accountingMode.value = false;
   }
 
   return {
@@ -112,6 +106,7 @@ export const useFinanceStore = defineStore("finance", () => {
     filteredInvoices,
     availableYears,
     selectedYears,
+    accountingMode,
     hasData,
     addSnapshots,
     toggleYear,

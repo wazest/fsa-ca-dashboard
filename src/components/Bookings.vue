@@ -71,12 +71,12 @@
           </div>
         </div>
 
-        <div class="chart-wrapper wide-chart">
-          <h3>Bookings by Time Slot</h3>
-          <div class="chart">
-            <Bar :data="bookingsByTimeChartData" :options="chartOptions" />
-          </div>
-        </div>
+        <!-- <div class="chart-wrapper wide-chart"> -->
+        <!-- <h3>Bookings by Time Slot</h3> -->
+        <!-- <div class="chart"> -->
+        <!-- <Bar :data="bookingsByTimeChartData" :options="chartOptions" /> -->
+        <!-- </div> -->
+        <!-- </div> -->
       </div>
 
       <div v-if="bookingData.length > 0" class="stats-container">
@@ -205,7 +205,16 @@ const formatDate = (date: Date): string => {
 const isRelevantClass = (className: string): boolean => {
   const lower = className.toLowerCase();
 
-  const excludedKeywords = ["test", "testing", "seminar", "workshop", "event"];
+  const excludedKeywords = [
+    "test",
+    "testing",
+    "seminar",
+    "workshop",
+    "event",
+    "oster",
+    "ostermontag",
+    "prüfung",
+  ];
 
   if (excludedKeywords.some((keyword) => lower.includes(keyword))) {
     return false;
@@ -219,6 +228,7 @@ const isRelevantClass = (className: string): boolean => {
     "athletic",
     "kids",
     "competition",
+    "sparring",
   ];
 
   return includedKeywords.some((keyword) => lower.includes(keyword));
@@ -231,7 +241,9 @@ const matchesFilter = (className: string): boolean => {
 
   if (selectedFilter.value === "kickboxing") {
     return (
-      lowerClassName.includes("kickbox") || lowerClassName.includes("fitbox")
+      lowerClassName.includes("kickbox") ||
+      lowerClassName.includes("fitbox") ||
+      lowerClassName.includes("sparring")
     );
   }
 
@@ -252,7 +264,11 @@ const matchesFilter = (className: string): boolean => {
 
 const getClassType = (className: string): FilterType => {
   const lower = className.toLowerCase();
-  if (lower.includes("kickbox") || lower.includes("fitbox"))
+  if (
+    lower.includes("kickbox") ||
+    lower.includes("fitbox") ||
+    lower.includes("sparring")
+  )
     return "kickboxing";
   if (lower.includes("bjj") || lower.includes("brazilian")) return "bjj";
   if (lower.includes("athletik") || lower.includes("athletic"))
