@@ -3,6 +3,46 @@
     <header class="header">
       <div class="header-content">
         <h1>FSA FINANCE</h1>
+
+        <div class="settings-wrapper">
+          <button
+            class="settings-button"
+            @click="showSettings = !showSettings"
+            :class="{ active: showSettings }"
+            aria-label="Settings"
+          >
+            ⚙️ Settings
+          </button>
+          <div v-if="showSettings" class="settings-dropdown">
+            <div class="settings-row">
+              <label class="settings-label">
+                <span>Cash-Sicht</span>
+                <span class="settings-label-sub">brutto, Kaufdatum</span>
+              </label>
+              <label class="switch">
+                <input type="checkbox" v-model="accountingMode" />
+                <span class="slider"></span>
+              </label>
+              <label class="settings-label">
+                <span>Buchhaltung</span>
+                <span class="settings-label-sub">netto, periodisch</span>
+              </label>
+            </div>
+            <div class="settings-divider"></div>
+            <div class="settings-row">
+              <label class="settings-label">
+                <span>Dev Mode</span>
+                <span class="settings-label-sub">
+                  Zeigt Storno/Nie aktiviert/Admin Details
+                </span>
+              </label>
+              <label class="switch">
+                <input type="checkbox" v-model="devMode" />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -57,26 +97,6 @@
             {{ year }}
           </button>
         </div>
-        <div class="accounting-toggle">
-          <span :class="{ 'mode-active': !accountingMode }">💰 Cash-Sicht</span>
-          <label class="switch">
-            <input type="checkbox" v-model="accountingMode" />
-            <span class="slider"></span>
-          </label>
-          <span :class="{ 'mode-active': accountingMode }">
-            📊 Buchhaltungs-Sicht
-          </span>
-        </div>
-        <p class="mode-hint">
-          <span v-if="!accountingMode">
-            Brutto inkl. MWSt, Rechnungen nach <strong>Kaufdatum</strong> im
-            gewählten Jahr.
-          </span>
-          <span v-else>
-            Netto ohne MWSt, anteilig nach <strong>Leistungszeitraum</strong>
-            (Kaufdatum → Gültig bis). Vergleichbar mit Jahresrechnung.
-          </span>
-        </p>
       </div>
 
       <div v-if="hasData">
@@ -158,7 +178,7 @@
                 CHF {{ formatNumber(cancellationAnalysis.comebackAmount) }}
               </p>
             </div>
-            <div class="stat-card never-activated">
+            <div v-if="devMode" class="stat-card never-activated">
               <h4>Nie aktiviert</h4>
               <p class="count">
                 {{ cancellationAnalysis.neverActivatedCount }} Rechnungen
@@ -168,7 +188,7 @@
                 {{ formatNumber(cancellationAnalysis.neverActivatedAmount) }}
               </p>
             </div>
-            <div class="stat-card real-storno">
+            <div v-if="devMode" class="stat-card real-storno">
               <h4>Echt Storno</h4>
               <p class="count">
                 {{ cancellationAnalysis.realStornoCount }} Rechnungen
@@ -177,7 +197,7 @@
                 CHF {{ formatNumber(cancellationAnalysis.realStornoAmount) }}
               </p>
             </div>
-            <div class="stat-card admin">
+            <div v-if="devMode" class="stat-card admin">
               <h4>Admin (Probe/Pass)</h4>
               <p class="count">
                 {{ cancellationAnalysis.adminCount }} Rechnungen
@@ -188,7 +208,11 @@
             </div>
           </div>
 
-          <p class="hint" style="margin-top: -10px; text-align: center">
+          <p
+            v-if="devMode"
+            class="hint"
+            style="margin-top: -10px; text-align: center"
+          >
             ℹ️ Wechsel: ±30 Tage – Comeback: 31–180 Tage später – Nie aktiviert:
             annulliert + nie bezahlt – Echt Storno: annulliert + war bezahlt –
             Admin: Probetraining/Day Pass
@@ -334,16 +358,6 @@
           <h2 class="section-title">Trends</h2>
 
           <div class="chart-wrapper wide-chart">
-            <h3>Annullierungen pro Monat (Abo-Wechsel vs. Echt)</h3>
-            <div class="chart">
-              <Bar
-                :data="cancellationTrendData"
-                :options="stackedMoneyChartOptions"
-              />
-            </div>
-          </div>
-
-          <div class="chart-wrapper wide-chart">
             <h3>Status pro Erstellungsmonat</h3>
             <p class="chart-hint">
               Welchen Status haben Rechnungen die in dem jeweiligen Monat
@@ -449,6 +463,15 @@ const accountingMode = computed({
 });
 const isAccrual = computed(() => accountingMode.value === true);
 
+const devMode = computed({
+  get: () => store.devMode,
+  set: (v: boolean) => {
+    store.devMode = v;
+  },
+});
+
+const showSettings = ref(false);
+
 const matchesYearFilter = (inv: Invoice): boolean => {
   if (store.selectedYears.length === 0) return true;
   if (!inv.kaufdatum) return false;
@@ -520,7 +543,7 @@ const STATUSES = [
 ];
 
 // Pie chart shows annulments split into switches, comebacks, never activated, real storno and admin
-const PIE_STATUSES = [
+const PIE_STATUSES_FULL = [
   "Bezahlt",
   "Offen",
   "1. Mahnung",
@@ -532,6 +555,21 @@ const PIE_STATUSES = [
   "Echt Storno",
   "Admin (Probe/Pass)",
 ];
+
+// Simplified view (non-dev): bundles never activated / real storno / admin into "Annulliert"
+const PIE_STATUSES_SIMPLE = [
+  "Bezahlt",
+  "Offen",
+  "1. Mahnung",
+  "2. Mahnung",
+  "3. Mahnung",
+  "Abo-Wechsel",
+  "Comeback",
+];
+
+const PIE_STATUSES = computed(() =>
+  store.devMode ? PIE_STATUSES_FULL : PIE_STATUSES_SIMPLE,
+);
 
 const statusColors: Record<string, string> = {
   Bezahlt: "#00C851",
@@ -744,10 +782,12 @@ const statusBreakdown = computed(() => {
 });
 
 const pieBreakdown = computed(() => {
+  const statuses = PIE_STATUSES.value;
   const data: Record<string, { count: number; amount: number }> = {};
-  for (const s of PIE_STATUSES) data[s] = { count: 0, amount: 0 };
+  for (const s of statuses) data[s] = { count: 0, amount: 0 };
 
   const analysis = cancellationAnalysis.value;
+  const isDev = store.devMode;
 
   for (const inv of activeInvoices.value) {
     const status = extractStatus(inv.rechnungsstatus);
@@ -757,16 +797,23 @@ const pieBreakdown = computed(() => {
       let bucket: string;
       if (analysis.switches.has(inv.rechnungsnummer)) bucket = "Abo-Wechsel";
       else if (analysis.comebacks.has(inv.rechnungsnummer)) bucket = "Comeback";
-      else if (analysis.neverActivated.has(inv.rechnungsnummer))
-        bucket = "Nie aktiviert";
-      else if (analysis.realStornos.has(inv.rechnungsnummer))
-        bucket = "Echt Storno";
-      else if (analysis.adminCancellations.has(inv.rechnungsnummer))
-        bucket = "Admin (Probe/Pass)";
-      else bucket = "Nie aktiviert"; // fallback
+      else if (isDev) {
+        if (analysis.neverActivated.has(inv.rechnungsnummer))
+          bucket = "Nie aktiviert";
+        else if (analysis.realStornos.has(inv.rechnungsnummer))
+          bucket = "Echt Storno";
+        else if (analysis.adminCancellations.has(inv.rechnungsnummer))
+          bucket = "Admin (Probe/Pass)";
+        else bucket = "Nie aktiviert";
+      } else {
+        // Non-dev: bundle never-activated/storno/admin into "Annulliert"
+        bucket = "Annulliert";
+      }
 
-      data[bucket].count += 1;
-      data[bucket].amount += amount;
+      if (bucket in data) {
+        data[bucket].count += 1;
+        data[bucket].amount += amount;
+      }
     } else if (status in data) {
       data[status].count += 1;
       data[status].amount += amount;
@@ -777,11 +824,11 @@ const pieBreakdown = computed(() => {
 });
 
 const statusPieData = computed(() => ({
-  labels: PIE_STATUSES,
+  labels: PIE_STATUSES.value,
   datasets: [
     {
-      data: PIE_STATUSES.map((s) => pieBreakdown.value[s].amount),
-      backgroundColor: PIE_STATUSES.map((s) => statusColors[s]),
+      data: PIE_STATUSES.value.map((s) => pieBreakdown.value[s].amount),
+      backgroundColor: PIE_STATUSES.value.map((s) => statusColors[s]),
     },
   ],
 }));
@@ -800,7 +847,7 @@ const statusPieOptions = {
           const label = ctx.label || "";
           const amount = ctx.raw || 0;
           const count = pieBreakdown.value[label]?.count ?? 0;
-          const total = PIE_STATUSES.reduce(
+          const total = PIE_STATUSES.value.reduce(
             (sum, s) => sum + pieBreakdown.value[s].amount,
             0,
           );
@@ -1205,49 +1252,13 @@ const cancellationAnalysis = computed(() => {
 // ============================================================
 // SECTION: TRENDS
 // ============================================================
-const cancellationTrendData = computed(() => {
-  const switches = new Map<string, number>();
-  const trueCancels = new Map<string, number>();
-  const analysis = cancellationAnalysis.value;
-
-  for (const inv of filteredInvoices.value) {
-    if (extractStatus(inv.rechnungsstatus) !== "Annulliert") continue;
-    if (!inv.kaufdatum) continue;
-    const key = monthKey(inv.kaufdatum);
-
-    if (analysis.switches.has(inv.rechnungsnummer)) {
-      switches.set(key, (switches.get(key) ?? 0) + inv.total);
-    } else {
-      trueCancels.set(key, (trueCancels.get(key) ?? 0) + inv.total);
-    }
-  }
-
-  const keys = sortMonthKeys(
-    Array.from(new Set([...switches.keys(), ...trueCancels.keys()])),
-  );
-
-  return {
-    labels: keys,
-    datasets: [
-      {
-        label: "Abo-Wechsel",
-        data: keys.map((k) => switches.get(k) ?? 0),
-        backgroundColor: "#5a91db",
-      },
-      {
-        label: "Echt Annulliert",
-        data: keys.map((k) => trueCancels.get(k) ?? 0),
-        backgroundColor: "#999999",
-      },
-    ],
-  };
-});
-
 // Status-Evolution: grouped by Kaufdatum-Monat. Zeigt für Rechnungen die in
 // einem bestimmten Monat erstellt wurden, wie deren Status heute aussieht.
 const statusEvolutionData = computed(() => {
   const analysis = cancellationAnalysis.value;
   const byMonth = new Map<string, Record<string, number>>();
+  const statuses = PIE_STATUSES.value;
+  const isDev = store.devMode;
 
   for (const inv of filteredInvoices.value) {
     if (!inv.kaufdatum) continue;
@@ -1255,24 +1266,38 @@ const statusEvolutionData = computed(() => {
 
     if (!byMonth.has(key)) {
       const initial: Record<string, number> = {};
-      for (const s of PIE_STATUSES) initial[s] = 0;
+      for (const s of statuses) initial[s] = 0;
       byMonth.set(key, initial);
     }
 
     const status = extractStatus(inv.rechnungsstatus);
-    const bucket =
-      status === "Annulliert"
-        ? analysis.switches.has(inv.rechnungsnummer)
-          ? "Abo-Wechsel"
-          : "Echt Annulliert"
-        : status;
+    let bucket: string;
+    if (status === "Annulliert") {
+      if (analysis.switches.has(inv.rechnungsnummer)) bucket = "Abo-Wechsel";
+      else if (analysis.comebacks.has(inv.rechnungsnummer)) bucket = "Comeback";
+      else if (isDev) {
+        if (analysis.neverActivated.has(inv.rechnungsnummer))
+          bucket = "Nie aktiviert";
+        else if (analysis.realStornos.has(inv.rechnungsnummer))
+          bucket = "Echt Storno";
+        else if (analysis.adminCancellations.has(inv.rechnungsnummer))
+          bucket = "Admin (Probe/Pass)";
+        else bucket = "Nie aktiviert";
+      } else {
+        bucket = "Annulliert";
+      }
+    } else {
+      bucket = status;
+    }
 
-    byMonth.get(key)![bucket] += 1;
+    if (bucket in byMonth.get(key)!) {
+      byMonth.get(key)![bucket] += 1;
+    }
   }
 
   const labels = sortMonthKeys(Array.from(byMonth.keys()));
 
-  const datasets = PIE_STATUSES.map((status) => ({
+  const datasets = statuses.map((status) => ({
     label: status,
     data: labels.map((label) => byMonth.get(label)![status] ?? 0),
     backgroundColor: statusColors[status],
@@ -1606,19 +1631,79 @@ h1 {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.accounting-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin-top: 18px;
-  font-size: 0.95rem;
-  color: #666;
+.header-content {
+  position: relative;
+  justify-content: space-between;
 }
 
-.accounting-toggle .mode-active {
-  color: #1a519b;
+.settings-wrapper {
+  position: relative;
+}
+
+.settings-button {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  color: #333;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.settings-button:hover,
+.settings-button.active {
+  background: #1a519b;
+  color: white;
+  border-color: #1a519b;
+}
+
+.settings-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 320px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  padding: 16px;
+  z-index: 100;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.settings-label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.9rem;
+  color: #333;
+  flex: 1;
+  cursor: default;
+}
+
+.settings-label > span:first-child {
   font-weight: bold;
+  color: #1a519b;
+}
+
+.settings-label-sub {
+  font-size: 0.75rem;
+  color: #888;
+  margin-top: 2px;
+  font-weight: normal;
+}
+
+.settings-divider {
+  height: 1px;
+  background: #eee;
+  margin: 8px 0;
 }
 
 .switch {
@@ -1626,6 +1711,7 @@ h1 {
   display: inline-block;
   width: 50px;
   height: 26px;
+  flex-shrink: 0;
 }
 
 .switch input {
@@ -1664,13 +1750,6 @@ input:checked + .slider {
 
 input:checked + .slider:before {
   transform: translateX(24px);
-}
-
-.mode-hint {
-  text-align: center;
-  font-size: 0.85rem;
-  color: #888;
-  margin: 8px 0 0;
 }
 
 .year-filter {

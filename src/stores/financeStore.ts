@@ -26,6 +26,7 @@ export const useFinanceStore = defineStore("finance", () => {
   const snapshots = ref<InvoiceSnapshot[]>([]);
   const selectedYears = ref<number[]>([]);
   const accountingMode = ref(false); // false = Cash-Sicht, true = Buchhaltungs-Sicht
+  const devMode = ref(false); // Zeigt sensible/diskutierbare Detail-Stats
 
   const hasData = computed(() => snapshots.value.length > 0);
 
@@ -97,6 +98,7 @@ export const useFinanceStore = defineStore("finance", () => {
     snapshots.value = [];
     selectedYears.value = [];
     accountingMode.value = false;
+    devMode.value = false;
   }
 
   return {
@@ -107,6 +109,7 @@ export const useFinanceStore = defineStore("finance", () => {
     availableYears,
     selectedYears,
     accountingMode,
+    devMode,
     hasData,
     addSnapshots,
     toggleYear,
