@@ -3,6 +3,46 @@
     <header class="header">
       <div class="header-content">
         <h1>FSA FINANCE</h1>
+
+        <div class="settings-wrapper">
+          <button
+            class="settings-button"
+            @click="showSettings = !showSettings"
+            :class="{ active: showSettings }"
+            aria-label="Settings"
+          >
+            ⚙️ Settings
+          </button>
+          <div v-if="showSettings" class="settings-dropdown">
+            <div class="settings-row">
+              <label class="settings-label">
+                <span>Cash-Sicht</span>
+                <span class="settings-label-sub">brutto, Kaufdatum</span>
+              </label>
+              <label class="switch">
+                <input type="checkbox" v-model="accountingMode" />
+                <span class="slider"></span>
+              </label>
+              <label class="settings-label">
+                <span>Buchhaltung</span>
+                <span class="settings-label-sub">netto, periodisch</span>
+              </label>
+            </div>
+            <div class="settings-divider"></div>
+            <div class="settings-row">
+              <label class="settings-label">
+                <span>Dev Mode</span>
+                <span class="settings-label-sub">
+                  Zeigt Storno/Nie aktiviert/Admin Details
+                </span>
+              </label>
+              <label class="switch">
+                <input type="checkbox" v-model="devMode" />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -120,7 +160,7 @@
                 CHF {{ formatNumber(overview.outstandingAmount) }}
               </p>
             </div>
-            <div class="stat-card switch">
+            <div class="stat-card aboSwitch">
               <h4>Abo-Wechsel</h4>
               <p class="count">
                 {{ cancellationAnalysis.switchCount }} Rechnungen
@@ -129,20 +169,53 @@
                 CHF {{ formatNumber(cancellationAnalysis.switchAmount) }}
               </p>
             </div>
-            <div class="stat-card cancelled">
-              <h4>Echt Annulliert</h4>
+            <div class="stat-card comeback">
+              <h4>Comeback</h4>
               <p class="count">
-                {{ cancellationAnalysis.trueCancelCount }} Rechnungen
+                {{ cancellationAnalysis.comebackCount }} Rechnungen
               </p>
               <p class="amount">
-                CHF {{ formatNumber(cancellationAnalysis.trueCancelAmount) }}
+                CHF {{ formatNumber(cancellationAnalysis.comebackAmount) }}
+              </p>
+            </div>
+            <div v-if="devMode" class="stat-card never-activated">
+              <h4>Nie aktiviert</h4>
+              <p class="count">
+                {{ cancellationAnalysis.neverActivatedCount }} Rechnungen
+              </p>
+              <p class="amount">
+                CHF
+                {{ formatNumber(cancellationAnalysis.neverActivatedAmount) }}
+              </p>
+            </div>
+            <div v-if="devMode" class="stat-card real-storno">
+              <h4>Echt Storno</h4>
+              <p class="count">
+                {{ cancellationAnalysis.realStornoCount }} Rechnungen
+              </p>
+              <p class="amount">
+                CHF {{ formatNumber(cancellationAnalysis.realStornoAmount) }}
+              </p>
+            </div>
+            <div v-if="devMode" class="stat-card admin">
+              <h4>Admin (Probe/Pass)</h4>
+              <p class="count">
+                {{ cancellationAnalysis.adminCount }} Rechnungen
+              </p>
+              <p class="amount">
+                CHF {{ formatNumber(cancellationAnalysis.adminAmount) }}
               </p>
             </div>
           </div>
 
-          <p class="hint" style="margin-top: -10px; text-align: center">
-            ℹ️ Abo-Wechsel erkannt wenn derselbe Kunde innerhalb von
-            {{ 30 }} Tagen eine neue (nicht annullierte) Rechnung hat.
+          <p
+            v-if="devMode"
+            class="hint"
+            style="margin-top: -10px; text-align: center"
+          >
+            ℹ️ Wechsel: ±30 Tage – Comeback: 31–180 Tage später – Nie aktiviert:
+            annulliert + nie bezahlt – Echt Storno: annulliert + war bezahlt –
+            Admin: Probetraining/Day Pass
           </p>
 
           <div class="chart-wrapper">
@@ -284,16 +357,6 @@
         <section class="section">
           <h2 class="section-title">Trends</h2>
 
-          <!--<div class="chart-wrapper wide-chart">
-            <h3>Annullierungen pro Monat (Abo-Wechsel vs. Echt)</h3>
-            <div class="chart">
-              <Bar
-                :data="cancellationTrendData"
-                :options="stackedMoneyChartOptions"
-              />
-            </div>
-          </div>-->
-
           <div class="chart-wrapper wide-chart">
             <h3>Status pro Erstellungsmonat</h3>
             <p class="chart-hint">
@@ -392,11 +455,80 @@ const availableYears = computed(() => store.availableYears);
 const selectedYears = computed(() => store.selectedYears);
 const toggleYear = (year: number) => store.toggleYear(year);
 
+const accountingMode = computed({
+  get: () => store.accountingMode,
+  set: (v: boolean) => {
+    store.accountingMode = v;
+  },
+});
+const isAccrual = computed(() => accountingMode.value === true);
+
+const devMode = computed({
+  get: () => store.devMode,
+  set: (v: boolean) => {
+    store.devMode = v;
+  },
+});
+
+const showSettings = ref(false);
+
 const matchesYearFilter = (inv: Invoice): boolean => {
   if (store.selectedYears.length === 0) return true;
   if (!inv.kaufdatum) return false;
   return store.selectedYears.includes(inv.kaufdatum.getFullYear());
 };
+
+// ============================================================
+// ACCOUNTING-MODE HELPERS
+// Cash:    inv.total (brutto), Filter via Kaufdatum-Jahr
+// Accrual: (inv.total - inv.mwst) (netto), anteilig zur Leistung im Jahr
+// ============================================================
+
+// Returns share (0-1) of invoice validity period that falls in selected years
+const yearShare = (inv: Invoice): number => {
+  const years =
+    store.selectedYears.length > 0 ? store.selectedYears : availableYears.value;
+  if (years.length === 0) return 1;
+  if (!inv.kaufdatum) return 0;
+
+  // No validity period info → use Kaufdatum year membership
+  if (!inv.gueltigBis || inv.gueltigBis <= inv.kaufdatum) {
+    return years.includes(inv.kaufdatum.getFullYear()) ? 1 : 0;
+  }
+
+  const totalDays = differenceInDays(inv.gueltigBis, inv.kaufdatum) + 1;
+  if (totalDays <= 0) return 1;
+
+  let totalShare = 0;
+  for (const year of years) {
+    const yearStart = new Date(year, 0, 1);
+    const yearEnd = new Date(year, 11, 31, 23, 59, 59);
+    const periodStart = inv.kaufdatum > yearStart ? inv.kaufdatum : yearStart;
+    const periodEnd = inv.gueltigBis < yearEnd ? inv.gueltigBis : yearEnd;
+
+    if (periodEnd < periodStart) continue;
+
+    const daysInYear = differenceInDays(periodEnd, periodStart) + 1;
+    totalShare += daysInYear / totalDays;
+  }
+
+  return Math.min(1, totalShare);
+};
+
+// Effective amount considering mode
+const getAmount = (inv: Invoice): number => {
+  if (!isAccrual.value) return inv.total; // brutto
+  const net = inv.total - inv.mwst; // netto
+  return net * yearShare(inv);
+};
+
+// Active invoice set considering mode
+// Cash: filteredInvoices (Kaufdatum in selected years)
+// Accrual: all merged invoices that have any share in selected years
+const activeInvoices = computed((): Invoice[] => {
+  if (!isAccrual.value) return filteredInvoices.value;
+  return mergedInvoices.value.filter((i) => yearShare(i) > 0);
+});
 
 // ============================================================
 // CONSTANTS
@@ -410,16 +542,34 @@ const STATUSES = [
   "Annulliert",
 ];
 
-// Pie chart shows annulments split into switches vs true cancellations
-const PIE_STATUSES = [
+// Pie chart shows annulments split into switches, comebacks, never activated, real storno and admin
+const PIE_STATUSES_FULL = [
   "Bezahlt",
   "Offen",
   "1. Mahnung",
   "2. Mahnung",
   "3. Mahnung",
   "Abo-Wechsel",
-  "Echt Annulliert",
+  "Comeback",
+  "Nie aktiviert",
+  "Echt Storno",
+  "Admin (Probe/Pass)",
 ];
+
+// Simplified view (non-dev): bundles never activated / real storno / admin into "Annulliert"
+const PIE_STATUSES_SIMPLE = [
+  "Bezahlt",
+  "Offen",
+  "1. Mahnung",
+  "2. Mahnung",
+  "3. Mahnung",
+  "Abo-Wechsel",
+  "Comeback",
+];
+
+const PIE_STATUSES = computed(() =>
+  store.devMode ? PIE_STATUSES_FULL : PIE_STATUSES_SIMPLE,
+);
 
 const statusColors: Record<string, string> = {
   Bezahlt: "#00C851",
@@ -429,7 +579,10 @@ const statusColors: Record<string, string> = {
   "3. Mahnung": "#ff4444",
   Annulliert: "#999999",
   "Abo-Wechsel": "#5a91db",
-  "Echt Annulliert": "#999999",
+  Comeback: "#3a71bb",
+  "Nie aktiviert": "#bbbbbb",
+  "Echt Storno": "#555555",
+  "Admin (Probe/Pass)": "#dddddd",
 };
 
 const MAHNSTUFEN = ["1. Mahnung", "2. Mahnung", "3. Mahnung"];
@@ -514,11 +667,11 @@ const outstandingBreakdown = computed(() => {
   const data: Record<string, { count: number; amount: number }> = {};
   for (const s of OUTSTANDING_STATUSES) data[s] = { count: 0, amount: 0 };
 
-  for (const inv of filteredInvoices.value) {
+  for (const inv of activeInvoices.value) {
     const status = extractStatus(inv.rechnungsstatus);
     if (status in data) {
       data[status].count += 1;
-      data[status].amount += inv.total;
+      data[status].amount += getAmount(inv);
     }
   }
 
@@ -588,20 +741,25 @@ const overview = computed(() => {
     cancelledAmount: 0,
   };
 
-  for (const inv of filteredInvoices.value) {
+  const invoices = accountingMode.value
+    ? activeInvoices.value
+    : filteredInvoices.value;
+
+  for (const inv of invoices) {
     const status = extractStatus(inv.rechnungsstatus);
+    const value = getAmount(inv);
     result.totalCount += 1;
-    result.totalAmount += inv.total;
+    result.totalAmount += value;
 
     if (status === "Bezahlt") {
       result.paidCount += 1;
-      result.paidAmount += inv.total;
+      result.paidAmount += value;
     } else if (status === "Annulliert") {
       result.cancelledCount += 1;
-      result.cancelledAmount += inv.total;
+      result.cancelledAmount += value;
     } else {
       result.outstandingCount += 1;
-      result.outstandingAmount += inv.total;
+      result.outstandingAmount += value;
     }
   }
 
@@ -612,11 +770,11 @@ const statusBreakdown = computed(() => {
   const data: Record<string, { count: number; amount: number }> = {};
   for (const s of STATUSES) data[s] = { count: 0, amount: 0 };
 
-  for (const inv of filteredInvoices.value) {
+  for (const inv of activeInvoices.value) {
     const status = extractStatus(inv.rechnungsstatus);
     if (status in data) {
       data[status].count += 1;
-      data[status].amount += inv.total;
+      data[status].amount += getAmount(inv);
     }
   }
 
@@ -624,23 +782,41 @@ const statusBreakdown = computed(() => {
 });
 
 const pieBreakdown = computed(() => {
+  const statuses = PIE_STATUSES.value;
   const data: Record<string, { count: number; amount: number }> = {};
-  for (const s of PIE_STATUSES) data[s] = { count: 0, amount: 0 };
+  for (const s of statuses) data[s] = { count: 0, amount: 0 };
 
   const analysis = cancellationAnalysis.value;
+  const isDev = store.devMode;
 
-  for (const inv of filteredInvoices.value) {
+  for (const inv of activeInvoices.value) {
     const status = extractStatus(inv.rechnungsstatus);
+    const amount = getAmount(inv);
 
     if (status === "Annulliert") {
-      const bucket = analysis.switches.has(inv.rechnungsnummer)
-        ? "Abo-Wechsel"
-        : "Echt Annulliert";
-      data[bucket].count += 1;
-      data[bucket].amount += inv.total;
+      let bucket: string;
+      if (analysis.switches.has(inv.rechnungsnummer)) bucket = "Abo-Wechsel";
+      else if (analysis.comebacks.has(inv.rechnungsnummer)) bucket = "Comeback";
+      else if (isDev) {
+        if (analysis.neverActivated.has(inv.rechnungsnummer))
+          bucket = "Nie aktiviert";
+        else if (analysis.realStornos.has(inv.rechnungsnummer))
+          bucket = "Echt Storno";
+        else if (analysis.adminCancellations.has(inv.rechnungsnummer))
+          bucket = "Admin (Probe/Pass)";
+        else bucket = "Nie aktiviert";
+      } else {
+        // Non-dev: bundle never-activated/storno/admin into "Annulliert"
+        bucket = "Annulliert";
+      }
+
+      if (bucket in data) {
+        data[bucket].count += 1;
+        data[bucket].amount += amount;
+      }
     } else if (status in data) {
       data[status].count += 1;
-      data[status].amount += inv.total;
+      data[status].amount += amount;
     }
   }
 
@@ -648,11 +824,11 @@ const pieBreakdown = computed(() => {
 });
 
 const statusPieData = computed(() => ({
-  labels: PIE_STATUSES,
+  labels: PIE_STATUSES.value,
   datasets: [
     {
-      data: PIE_STATUSES.map((s) => pieBreakdown.value[s].amount),
-      backgroundColor: PIE_STATUSES.map((s) => statusColors[s]),
+      data: PIE_STATUSES.value.map((s) => pieBreakdown.value[s].amount),
+      backgroundColor: PIE_STATUSES.value.map((s) => statusColors[s]),
     },
   ],
 }));
@@ -671,7 +847,7 @@ const statusPieOptions = {
           const label = ctx.label || "";
           const amount = ctx.raw || 0;
           const count = pieBreakdown.value[label]?.count ?? 0;
-          const total = PIE_STATUSES.reduce(
+          const total = PIE_STATUSES.value.reduce(
             (sum, s) => sum + pieBreakdown.value[s].amount,
             0,
           );
@@ -690,19 +866,24 @@ const statusPieOptions = {
 // SECTION: UMSATZ & CASHFLOW
 // ============================================================
 const revenueVsCashInData = computed(() => {
-  const revenue = new Map<string, number>(); // by Kaufdatum
+  const revenue = new Map<string, number>(); // by Kaufdatum / Period
   const cashIn = new Map<string, number>(); // by Zahlung erhalten
 
-  for (const inv of filteredInvoices.value) {
-    const status = extractStatus(inv.rechnungsstatus);
+  const invoices = accountingMode.value
+    ? activeInvoices.value
+    : filteredInvoices.value;
 
-    // Revenue: alle ausser Annulliert, grouped by Kaufdatum
+  for (const inv of invoices) {
+    const status = extractStatus(inv.rechnungsstatus);
+    const value = getAmount(inv);
+
+    // Revenue: alle ausser Annulliert
     if (status !== "Annulliert" && inv.kaufdatum) {
       const key = monthKey(inv.kaufdatum);
-      revenue.set(key, (revenue.get(key) ?? 0) + inv.total);
+      revenue.set(key, (revenue.get(key) ?? 0) + value);
     }
 
-    // Cash-In: nur Bezahlt mit Zahlung-erhalten-Datum
+    // Cash-In: nur Bezahlt mit Zahlung-erhalten-Datum (immer brutto, da Cash)
     if (status === "Bezahlt" && inv.zahlungErhalten) {
       const key = monthKey(inv.zahlungErhalten);
       cashIn.set(key, (cashIn.get(key) ?? 0) + inv.total);
@@ -717,7 +898,9 @@ const revenueVsCashInData = computed(() => {
     labels: allKeys,
     datasets: [
       {
-        label: "Umsatz (Kaufdatum)",
+        label: accountingMode.value
+          ? "Ertrag (periodisch, netto)"
+          : "Umsatz (Kaufdatum)",
         data: allKeys.map((k) => revenue.get(k) ?? 0),
         backgroundColor: "#1a519b",
       },
@@ -945,15 +1128,23 @@ const criticalInvoices = computed(() => {
 });
 
 // ============================================================
-// CANCELLATION ANALYSIS: Switch vs True Cancellation
-// Heuristik: Wenn derselbe Kunde innerhalb von SWITCH_WINDOW_DAYS Tagen
-// eine NICHT-annullierte Rechnung hat → Abo-Wechsel.
+// CANCELLATION ANALYSIS: 4-tier classification
+//   Switch         – neue Rechnung ±30 Tage (sofortiger Wechsel)
+//   Comeback       – neue Rechnung 31-180 Tage später
+//   Nie aktiviert  – annulliert + nie bezahlt (Rechnung verfallen)
+//   Echt Storno    – annulliert + war bezahlt (echte Stornierung)
+//   Admin          – Probetraining / Day Pass (ausgeschlossen)
 // ============================================================
 const SWITCH_WINDOW_DAYS = 30;
+const COMEBACK_WINDOW_DAYS = 180;
+
+const isAdminAbo = (subscription: string): boolean => {
+  const s = (subscription || "").toLowerCase();
+  return s.includes("probetraining") || s.includes("day pass");
+};
 
 const cancellationAnalysis = computed(() => {
-  // Build customer → invoices map (from ALL invoices for accurate lookup,
-  // even if year filter is active — we want to find switches across years)
+  // Build customer → invoices map (across all years for accurate lookup)
   const byCustomer = new Map<string, Invoice[]>();
   for (const inv of mergedInvoices.value) {
     if (!inv.customerId) continue;
@@ -962,97 +1153,112 @@ const cancellationAnalysis = computed(() => {
   }
 
   const switches = new Set<string>();
-  const trueCancellations = new Set<string>();
+  const comebacks = new Set<string>();
+  const neverActivated = new Set<string>();
+  const realStornos = new Set<string>();
+  const adminCancellations = new Set<string>();
+
+  // Helper: was the cancelled invoice actually paid before cancellation?
+  const wasPaid = (inv: Invoice) =>
+    inv.zahlungErhalten !== null || (inv.teilzahlungErhalten ?? 0) > 0;
 
   for (const inv of filteredInvoices.value) {
     if (extractStatus(inv.rechnungsstatus) !== "Annulliert") continue;
 
+    // Admin (Probe/Day Pass) → exclude
+    if (isAdminAbo(inv.abonnement)) {
+      adminCancellations.add(inv.rechnungsnummer);
+      continue;
+    }
+
     if (!inv.kaufdatum || !inv.customerId) {
-      trueCancellations.add(inv.rechnungsnummer);
+      // No date/customer → fallback bucket
+      if (wasPaid(inv)) realStornos.add(inv.rechnungsnummer);
+      else neverActivated.add(inv.rechnungsnummer);
       continue;
     }
 
     const customerInvoices = byCustomer.get(inv.customerId) || [];
-    const hasNearbyNonCancelled = customerInvoices.some((other) => {
-      if (other.rechnungsnummer === inv.rechnungsnummer) return false;
-      if (extractStatus(other.rechnungsstatus) === "Annulliert") return false;
-      if (!other.kaufdatum) return false;
-      const days = Math.abs(differenceInDays(other.kaufdatum, inv.kaufdatum!));
-      return days <= SWITCH_WINDOW_DAYS;
-    });
 
-    if (hasNearbyNonCancelled) {
+    const findOther = (predicate: (days: number) => boolean) =>
+      customerInvoices.some((other) => {
+        if (other.rechnungsnummer === inv.rechnungsnummer) return false;
+        if (extractStatus(other.rechnungsstatus) === "Annulliert") return false;
+        if (isAdminAbo(other.abonnement)) return false;
+        if (!other.kaufdatum) return false;
+        const days = differenceInDays(other.kaufdatum, inv.kaufdatum!);
+        return predicate(days);
+      });
+
+    // Switch: ±30 days
+    if (findOther((days) => Math.abs(days) <= SWITCH_WINDOW_DAYS)) {
       switches.add(inv.rechnungsnummer);
+      continue;
+    }
+
+    // Comeback: 31-180 days later
+    if (
+      findOther(
+        (days) => days > SWITCH_WINDOW_DAYS && days <= COMEBACK_WINDOW_DAYS,
+      )
+    ) {
+      comebacks.add(inv.rechnungsnummer);
+      continue;
+    }
+
+    // No nearby invoices → split by payment status
+    if (wasPaid(inv)) {
+      realStornos.add(inv.rechnungsnummer);
     } else {
-      trueCancellations.add(inv.rechnungsnummer);
+      neverActivated.add(inv.rechnungsnummer);
     }
   }
 
-  // Calculate amounts
+  // Calculate amounts (respects accounting mode)
   let switchAmount = 0;
-  let trueCancelAmount = 0;
-  for (const inv of filteredInvoices.value) {
-    if (switches.has(inv.rechnungsnummer)) switchAmount += inv.total;
-    else if (trueCancellations.has(inv.rechnungsnummer))
-      trueCancelAmount += inv.total;
+  let comebackAmount = 0;
+  let neverActivatedAmount = 0;
+  let realStornoAmount = 0;
+  let adminAmount = 0;
+  for (const inv of activeInvoices.value) {
+    const amount = getAmount(inv);
+    if (switches.has(inv.rechnungsnummer)) switchAmount += amount;
+    else if (comebacks.has(inv.rechnungsnummer)) comebackAmount += amount;
+    else if (neverActivated.has(inv.rechnungsnummer))
+      neverActivatedAmount += amount;
+    else if (realStornos.has(inv.rechnungsnummer)) realStornoAmount += amount;
+    else if (adminCancellations.has(inv.rechnungsnummer)) adminAmount += amount;
   }
 
   return {
     switches,
-    trueCancellations,
+    comebacks,
+    neverActivated,
+    realStornos,
+    adminCancellations,
     switchCount: switches.size,
-    trueCancelCount: trueCancellations.size,
+    comebackCount: comebacks.size,
+    neverActivatedCount: neverActivated.size,
+    realStornoCount: realStornos.size,
+    adminCount: adminCancellations.size,
     switchAmount,
-    trueCancelAmount,
+    comebackAmount,
+    neverActivatedAmount,
+    realStornoAmount,
+    adminAmount,
   };
 });
 
 // ============================================================
 // SECTION: TRENDS
 // ============================================================
-const cancellationTrendData = computed(() => {
-  const switches = new Map<string, number>();
-  const trueCancels = new Map<string, number>();
-  const analysis = cancellationAnalysis.value;
-
-  for (const inv of filteredInvoices.value) {
-    if (extractStatus(inv.rechnungsstatus) !== "Annulliert") continue;
-    if (!inv.kaufdatum) continue;
-    const key = monthKey(inv.kaufdatum);
-
-    if (analysis.switches.has(inv.rechnungsnummer)) {
-      switches.set(key, (switches.get(key) ?? 0) + inv.total);
-    } else {
-      trueCancels.set(key, (trueCancels.get(key) ?? 0) + inv.total);
-    }
-  }
-
-  const keys = sortMonthKeys(
-    Array.from(new Set([...switches.keys(), ...trueCancels.keys()])),
-  );
-
-  return {
-    labels: keys,
-    datasets: [
-      {
-        label: "Abo-Wechsel",
-        data: keys.map((k) => switches.get(k) ?? 0),
-        backgroundColor: "#5a91db",
-      },
-      {
-        label: "Echt Annulliert",
-        data: keys.map((k) => trueCancels.get(k) ?? 0),
-        backgroundColor: "#999999",
-      },
-    ],
-  };
-});
-
 // Status-Evolution: grouped by Kaufdatum-Monat. Zeigt für Rechnungen die in
 // einem bestimmten Monat erstellt wurden, wie deren Status heute aussieht.
 const statusEvolutionData = computed(() => {
   const analysis = cancellationAnalysis.value;
   const byMonth = new Map<string, Record<string, number>>();
+  const statuses = PIE_STATUSES.value;
+  const isDev = store.devMode;
 
   for (const inv of filteredInvoices.value) {
     if (!inv.kaufdatum) continue;
@@ -1060,24 +1266,38 @@ const statusEvolutionData = computed(() => {
 
     if (!byMonth.has(key)) {
       const initial: Record<string, number> = {};
-      for (const s of PIE_STATUSES) initial[s] = 0;
+      for (const s of statuses) initial[s] = 0;
       byMonth.set(key, initial);
     }
 
     const status = extractStatus(inv.rechnungsstatus);
-    const bucket =
-      status === "Annulliert"
-        ? analysis.switches.has(inv.rechnungsnummer)
-          ? "Abo-Wechsel"
-          : "Echt Annulliert"
-        : status;
+    let bucket: string;
+    if (status === "Annulliert") {
+      if (analysis.switches.has(inv.rechnungsnummer)) bucket = "Abo-Wechsel";
+      else if (analysis.comebacks.has(inv.rechnungsnummer)) bucket = "Comeback";
+      else if (isDev) {
+        if (analysis.neverActivated.has(inv.rechnungsnummer))
+          bucket = "Nie aktiviert";
+        else if (analysis.realStornos.has(inv.rechnungsnummer))
+          bucket = "Echt Storno";
+        else if (analysis.adminCancellations.has(inv.rechnungsnummer))
+          bucket = "Admin (Probe/Pass)";
+        else bucket = "Nie aktiviert";
+      } else {
+        bucket = "Annulliert";
+      }
+    } else {
+      bucket = status;
+    }
 
-    byMonth.get(key)![bucket] += 1;
+    if (bucket in byMonth.get(key)!) {
+      byMonth.get(key)![bucket] += 1;
+    }
   }
 
   const labels = sortMonthKeys(Array.from(byMonth.keys()));
 
-  const datasets = PIE_STATUSES.map((status) => ({
+  const datasets = statuses.map((status) => ({
     label: status,
     data: labels.map((label) => byMonth.get(label)![status] ?? 0),
     backgroundColor: statusColors[status],
@@ -1307,9 +1527,11 @@ const processFiles = async () => {
           rechnungsstatus: row["Rechnungsstatus"] || "",
           total: parseFloat(row["Total"] || 0),
           betrag: parseFloat(row["Betrag"] || 0),
+          mwst: parseFloat(row["MWSt"] || 0),
           teilzahlungErhalten: parseFloat(row["Teilzahlung erhalten"] || 0),
           kaufdatum: parseExcelDate(row["Kaufdatum"]),
           zahlbarBis: parseExcelDate(row["Zahlbar bis"]),
+          gueltigBis: parseExcelDate(row["Gültig bis"]),
           zahlungErhalten: parseExcelDate(row["Zahlung erhalten"]),
           abonnement: row["Abonnement"] || "",
           zahlungsart: row["Zahlungsart"] || "",
@@ -1407,6 +1629,127 @@ h1 {
   margin-bottom: 30px;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.header-content {
+  position: relative;
+  justify-content: space-between;
+}
+
+.settings-wrapper {
+  position: relative;
+}
+
+.settings-button {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  color: #333;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.settings-button:hover,
+.settings-button.active {
+  background: #1a519b;
+  color: white;
+  border-color: #1a519b;
+}
+
+.settings-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 320px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  padding: 16px;
+  z-index: 100;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+.settings-label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.9rem;
+  color: #333;
+  flex: 1;
+  cursor: default;
+}
+
+.settings-label > span:first-child {
+  font-weight: bold;
+  color: #1a519b;
+}
+
+.settings-label-sub {
+  font-size: 0.75rem;
+  color: #888;
+  margin-top: 2px;
+  font-weight: normal;
+}
+
+.settings-divider {
+  height: 1px;
+  background: #eee;
+  margin: 8px 0;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: 0.3s;
+  border-radius: 26px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #1a519b;
+}
+
+input:checked + .slider:before {
+  transform: translateX(24px);
 }
 
 .year-filter {
@@ -1561,8 +1904,25 @@ h1 {
   border-top: 4px solid #999;
 }
 
-.stat-card.switch {
+.stat-card.aboSwitch {
   border-top: 4px solid #5a91db;
+}
+
+.stat-card.comeback {
+  border-top: 4px solid #3a71bb;
+}
+
+.stat-card.never-activated {
+  border-top: 4px solid #bbbbbb;
+}
+
+.stat-card.real-storno {
+  border-top: 4px solid #555555;
+}
+
+.stat-card.admin {
+  border-top: 4px solid #dddddd;
+  opacity: 0.85;
 }
 
 .stat-card.highlight {
