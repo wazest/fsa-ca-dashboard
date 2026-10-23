@@ -56,6 +56,10 @@
             <h3>Total Customers</h3>
             <p>{{ totalCustomers }}</p>
           </div>
+          <div v-if="latestDatasetTimestamp" class="stat-card">
+            <h3>Neuester Datensatz</h3>
+            <p>{{ format(latestDatasetTimestamp, "dd.MM.yyyy HH:mm") }}</p>
+          </div>
         </div>
 
         <div v-if="filteredDatasets.length > 0" class="charts-container">
@@ -827,6 +831,14 @@ const parseCancellationDate = (status: string): Date | null => {
   const d = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
   return isValidDate(d) ? d : null;
 };
+
+const latestDatasetTimestamp = computed(() => {
+  if (datasets.value.length === 0) return null;
+  return datasets.value.reduce(
+    (latest, ds) => (ds.timestamp > latest ? ds.timestamp : latest),
+    datasets.value[0].timestamp,
+  );
+});
 
 const totalCustomers = computed(() => {
   if (filteredDatasets.value.length === 0) return 0;
