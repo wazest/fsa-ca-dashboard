@@ -23,6 +23,9 @@
         >
           {{ processing ? "Processing..." : "Process Files" }}
         </button>
+        <button v-if="hasData" @click="store.reset()" class="reset-button">
+          Reset
+        </button>
         <div v-if="processing" class="progress">Processing files...</div>
         <div v-if="error" class="error">{{ error }}</div>
       </div>
@@ -77,6 +80,61 @@
         <!-- <Bar :data="bookingsByTimeChartData" :options="chartOptions" /> -->
         <!-- </div> -->
         <!-- </div> -->
+
+        <div class="chart-wrapper wide-chart">
+          <h3>Entwicklung der Buchungen je Stunde</h3>
+
+          <div class="trend-controls">
+            <div class="period-picker">
+              <label>
+                Von
+                <input
+                  type="date"
+                  v-model="periodStart"
+                  :min="minDateStr"
+                  :max="periodEnd || maxDateStr"
+                  @input="onPeriodInput"
+                />
+              </label>
+              <label>
+                Bis
+                <input
+                  type="date"
+                  v-model="periodEnd"
+                  :min="periodStart || minDateStr"
+                  :max="maxDateStr"
+                  @input="onPeriodInput"
+                />
+              </label>
+              <button class="reset-period-button" @click="resetPeriod" type="button">
+                Zeitraum zurücksetzen
+              </button>
+            </div>
+
+            <div class="stunde-picker">
+              <label>
+                Stunde
+                <select v-model="selectedTrendStunde">
+                  <option value="all">Alle Stunden</option>
+                  <option
+                    v-for="option in trendStundeOptions"
+                    :key="option.key"
+                    :value="option.key"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div v-if="trendChartData.datasets.length" class="chart trend-chart">
+            <Line :data="trendChartData" :options="trendChartOptions" />
+          </div>
+          <div v-else class="no-data">
+            Keine Buchungen im gewählten Zeitraum für diese Auswahl.
+          </div>
+        </div>
       </div>
 
       <div v-if="bookingData.length > 0" class="stats-container">
@@ -107,17 +165,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
   BarElement,
+  LineElement,
+  PointElement,
   Title,
   Tooltip,
   Legend,
 } from "chart.js";
-import { Bar } from "vue-chartjs";
+import { Bar, Line } from "vue-chartjs";
 import * as XLSX from "xlsx";
 import { format } from "date-fns";
 import { useBookingsStore, type FilterType } from "../stores/bookingsStore";
@@ -126,6 +186,8 @@ ChartJS.register(
   CategoryScale,
   LinearScale,
   BarElement,
+  LineElement,
+  PointElement,
   Title,
   Tooltip,
   Legend,
@@ -160,6 +222,7 @@ const processing = ref(false);
 const error = ref("");
 const bookingData = computed(() => store.bookingData);
 const selectedFilter = computed(() => store.selectedFilter);
+const hasData = computed(() => store.hasData);
 const toggleFilter = (filter: FilterType) => store.setFilter(filter);
 
 const colorPalette = [
@@ -436,6 +499,200 @@ const averageBookingsChartData = computed(() => {
   };
 });
 
+// --- Trend over time (per individual Stunde) ---
+const periodStart = ref("");
+const periodEnd = ref("");
+const selectedTrendStunde = ref<string>("all");
+
+const toDateInputStr = (date: Date): string => format(date, "yyyy-MM-dd");
+
+const sortedUploadDates = computed(() => {
+  const uniqueTimes = Array.from(
+    new Set(bookingData.value.map((b) => b.date.getTime())),
+  ).sort((a, b) => a - b);
+  return uniqueTimes.map((t) => new Date(t));
+});
+
+const minDateStr = computed(() =>
+  sortedUploadDates.value.length
+    ? toDateInputStr(sortedUploadDates.value[0])
+    : "",
+);
+
+const maxDateStr = computed(() =>
+  sortedUploadDates.value.length
+    ? toDateInputStr(sortedUploadDates.value[sortedUploadDates.value.length - 1])
+    : "",
+);
+
+const periodManuallySet = ref(false);
+
+const resetPeriod = () => {
+  periodManuallySet.value = false;
+  periodStart.value = minDateStr.value;
+  periodEnd.value = maxDateStr.value;
+};
+
+const onPeriodInput = () => {
+  periodManuallySet.value = true;
+};
+
+// Keep the period synced to the full available range as more files are
+// uploaded, until the user explicitly picks their own range.
+watch(
+  [minDateStr, maxDateStr],
+  ([min, max]) => {
+    if (!min || !max || periodManuallySet.value) return;
+    periodStart.value = min;
+    periodEnd.value = max;
+  },
+  { immediate: true },
+);
+
+const bookingsInPeriod = computed(() => {
+  if (!periodStart.value && !periodEnd.value) return bookingData.value;
+
+  const start = periodStart.value ? new Date(`${periodStart.value}T00:00:00`) : null;
+  const end = periodEnd.value ? new Date(`${periodEnd.value}T23:59:59`) : null;
+
+  return bookingData.value.filter((b) => {
+    if (start && b.date < start) return false;
+    if (end && b.date > end) return false;
+    return true;
+  });
+});
+
+interface TrendSeriesEntry {
+  weekday: string;
+  time: string;
+  names: Set<string>;
+  points: Map<number, { sum: number; count: number }>;
+}
+
+const trendSeriesMap = computed(() => {
+  const map = new Map<string, TrendSeriesEntry>();
+
+  bookingsInPeriod.value
+    .filter((booking) => matchesFilter(booking.className))
+    .forEach((booking) => {
+      const classType = getClassType(booking.className);
+      const key = `${classType}-${booking.weekday}-${booking.time}`;
+      const dateKey = booking.date.getTime();
+
+      if (!map.has(key)) {
+        map.set(key, {
+          weekday: booking.weekday,
+          time: booking.time,
+          names: new Set([booking.className]),
+          points: new Map(),
+        });
+      }
+
+      const entry = map.get(key)!;
+      entry.names.add(booking.className);
+
+      const point = entry.points.get(dateKey) ?? { sum: 0, count: 0 };
+      point.sum += booking.averageAttendance;
+      point.count += 1;
+      entry.points.set(dateKey, point);
+    });
+
+  return map;
+});
+
+const trendStundeOptions = computed(() => {
+  return Array.from(trendSeriesMap.value.entries())
+    .map(([key, entry]) => {
+      const weekday = weekdayMap[entry.weekday] || entry.weekday;
+      const className = Array.from(entry.names).join(" + ");
+      return {
+        key,
+        label: `${weekday.substring(0, 3)} ${entry.time} - ${className}`,
+        weekday: entry.weekday,
+        time: entry.time,
+      };
+    })
+    .sort((a, b) => {
+      const weekdayA = weekdayOrder[weekdayMap[a.weekday] || a.weekday] || 0;
+      const weekdayB = weekdayOrder[weekdayMap[b.weekday] || b.weekday] || 0;
+      if (weekdayA !== weekdayB) return weekdayA - weekdayB;
+      if (a.time !== b.time) return a.time.localeCompare(b.time);
+      return a.label.localeCompare(b.label);
+    });
+});
+
+const trendDateKeys = computed(() => {
+  const times = new Set<number>();
+  trendSeriesMap.value.forEach((entry) => {
+    entry.points.forEach((_, dateKey) => times.add(dateKey));
+  });
+  return Array.from(times).sort((a, b) => a - b);
+});
+
+const trendChartData = computed(() => {
+  const dateKeys = trendDateKeys.value;
+  const labels = dateKeys.map((t) => formatDate(new Date(t)));
+
+  const optionsList =
+    selectedTrendStunde.value === "all"
+      ? trendStundeOptions.value
+      : trendStundeOptions.value.filter(
+          (o) => o.key === selectedTrendStunde.value,
+        );
+
+  const datasets = optionsList.map((option, index) => {
+    const entry = trendSeriesMap.value.get(option.key)!;
+    const color = colorPalette[index % colorPalette.length];
+
+    return {
+      label: option.label,
+      data: dateKeys.map((dateKey) => {
+        const point = entry.points.get(dateKey);
+        return point ? Math.round((point.sum / point.count) * 10) / 10 : null;
+      }),
+      borderColor: color,
+      backgroundColor: color,
+      spanGaps: true,
+      tension: 0.3,
+    };
+  });
+
+  console.log("DEBUG trendChartData", JSON.stringify({ labels, datasets }));
+  return { labels, datasets };
+});
+
+const trendChartOptions = {
+  responsive: true,
+  maintainAspectRatio: false,
+  interaction: {
+    mode: "index" as const,
+    intersect: false,
+  },
+  plugins: {
+    legend: {
+      display: true,
+      position: "bottom" as const,
+    },
+    tooltip: {
+      callbacks: {
+        label: (context: any) => `${context.dataset.label}: ${context.parsed.y}`,
+      },
+    },
+  },
+  scales: {
+    y: {
+      beginAtZero: true,
+      ticks: {
+        stepSize: 1,
+      },
+      title: {
+        display: true,
+        text: "Durchschnittliche Buchungen",
+      },
+    },
+  },
+};
+
 const chartOptions = {
   responsive: true,
   maintainAspectRatio: false,
@@ -572,16 +829,25 @@ h1 {
   background: white;
 }
 
-.process-button {
+.process-button,
+.reset-button {
   margin-top: 10px;
+  margin-left: 5px;
   padding: 8px 16px;
-  background-color: #1a519b;
   color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
   font-family: "Bebas Neue", sans-serif;
   font-size: 16px;
+}
+
+.process-button {
+  background-color: #1a519b;
+}
+
+.reset-button {
+  background-color: #999;
 }
 
 .process-button:disabled {
@@ -688,6 +954,69 @@ h1 {
   font-size: 2rem;
   font-weight: bold;
   color: #333;
+}
+
+.trend-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-end;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.period-picker,
+.stunde-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.trend-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9rem;
+  color: #1a519b;
+  font-weight: bold;
+}
+
+.trend-controls input[type="date"],
+.trend-controls select {
+  padding: 6px 10px;
+  border: 2px solid #1a519b;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 14px;
+  color: #333;
+}
+
+.reset-period-button {
+  padding: 8px 14px;
+  background-color: white;
+  color: #1a519b;
+  border: 2px solid #1a519b;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: "Bebas Neue", sans-serif;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  height: fit-content;
+}
+
+.reset-period-button:hover {
+  background-color: #e6eeff;
+}
+
+.trend-chart {
+  height: 450px;
+}
+
+.no-data {
+  text-align: center;
+  color: #777;
+  padding: 40px 0;
 }
 
 .error {
