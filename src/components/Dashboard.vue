@@ -30,6 +30,9 @@
         >
           {{ processing ? "Processing..." : "Process Files" }}
         </button>
+        <button v-if="store.hasData" @click="store.reset()" class="reset-button">
+          Reset
+        </button>
         <div v-if="processing" class="progress">Processing files...</div>
         <div v-if="error" class="error">{{ error }}</div>
       </div>
@@ -53,8 +56,33 @@
 
         <div class="stats-container">
           <div class="stat-card">
+            <h3>Total Current Active Passes</h3>
+            <p>{{ totalActivePasses }}</p>
+          </div>
+          <div class="stat-card">
             <h3>Total Customers</h3>
             <p>{{ totalCustomers }}</p>
+          </div>
+          <div class="stat-card">
+            <h3>Total Relevant Passes</h3>
+            <p>{{ totalRelevantCustomers }}</p>
+          </div>
+          <div class="stat-card">
+            <h3>Annual Growth</h3>
+            <p
+              :class="{
+                'growth-positive':
+                  annualGrowthPercent !== null && annualGrowthPercent >= 0,
+                'growth-negative':
+                  annualGrowthPercent !== null && annualGrowthPercent < 0,
+              }"
+            >
+              {{
+                annualGrowthPercent !== null
+                  ? `${annualGrowthPercent >= 0 ? "+" : ""}${annualGrowthPercent.toFixed(1)}%`
+                  : "–"
+              }}
+            </p>
           </div>
           <div v-if="latestDatasetTimestamp" class="stat-card">
             <h3>Neuester Datensatz</h3>
@@ -99,9 +127,16 @@
             <Bar :data="ageGroupDistributionData" :options="barChartOptions" />
           </div>
           <div class="chart wide-chart">
-            <h3>Current Subscriptions Revenue</h3>
+            <h3>Current Subscriptions Revenue (Relevant Types)</h3>
             <Bar
-              :data="allSubscriptionsRevenueData"
+              :data="relevantSubscriptionsRevenueData"
+              :options="revenueChartOptions"
+            />
+          </div>
+          <div class="chart wide-chart">
+            <h3>Current Subscriptions Revenue (Other Types)</h3>
+            <Bar
+              :data="otherSubscriptionsRevenueData"
               :options="revenueChartOptions"
             />
           </div>
@@ -172,6 +207,7 @@
                 'Fit & Athletik',
                 'MMA',
                 'Kinder',
+                'Other',
               ]"
               :key="type"
               @click="selectedCancellationFilter = type"
@@ -261,6 +297,7 @@
                 'Fit & Athletik',
                 'MMA',
                 'Kinder',
+                'Other',
                 'Pro Abos',
               ]"
               :key="type"
@@ -661,6 +698,11 @@ const subscriptionCategories = [
   "Mitarbeiter",
 ];
 
+// Für Charts, die zusätzlich einen Sammel-Balken für alle nicht
+// kategorisierten Abotypen zeigen sollen (getSubscriptionType liefert
+// "Other" für alles, was keiner der obigen Kategorien entspricht).
+const subscriptionCategoriesWithOther = [...subscriptionCategories, "Other"];
+
 const colorPalette = [
   "#1a519b",
   "#999999",
@@ -732,6 +774,14 @@ const isRelevantSubscription = (subscription: string): boolean => {
   return ["Striking", "Grappling", "MMA", "Fit & Athletik", "Kinder"].includes(
     type,
   );
+};
+
+// Ein Abo gilt als aktiv/gültig, solange "Gültig bis" (Stand des jeweiligen
+// Datensatzes) nicht in der Vergangenheit liegt. Fehlt das Datum, läuft das
+// Abo unbefristet und zählt ebenfalls als aktiv.
+const isActiveSubscription = (customer: Customer, asOf: Date): boolean => {
+  if (!isValidDate(customer.validUntil)) return true;
+  return customer.validUntil!.getTime() >= asOf.getTime();
 };
 
 const getSubscriptionType = (subscription: string): string => {
@@ -840,14 +890,69 @@ const latestDatasetTimestamp = computed(() => {
   );
 });
 
-const totalCustomers = computed(() => {
+// Eindeutige Person identifizieren – gleiche Konvention wie an anderen
+// Stellen im Dashboard (z. B. Kündigungs-Auswertung): E-Mail, sonst ID.
+const getPersonKey = (customer: Customer): string =>
+  customer.email || customer.id;
+
+const totalActivePasses = computed(() => {
   if (filteredDatasets.value.length === 0) return 0;
 
   const latestDataset =
     filteredDatasets.value[filteredDatasets.value.length - 1];
   return latestDataset.customers.filter((customer) =>
-    isRelevantSubscription(customer.subscription),
+    isActiveSubscription(customer, latestDataset.timestamp),
   ).length;
+});
+
+const totalCustomers = computed(() => {
+  if (filteredDatasets.value.length === 0) return 0;
+
+  const latestDataset =
+    filteredDatasets.value[filteredDatasets.value.length - 1];
+  const activePersons = new Set(
+    latestDataset.customers
+      .filter((customer) =>
+        isActiveSubscription(customer, latestDataset.timestamp),
+      )
+      .map(getPersonKey),
+  );
+  return activePersons.size;
+});
+
+const totalRelevantCustomers = computed(() => {
+  if (filteredDatasets.value.length === 0) return 0;
+
+  const latestDataset =
+    filteredDatasets.value[filteredDatasets.value.length - 1];
+  return latestDataset.customers.filter(
+    (customer) =>
+      isRelevantSubscription(customer.subscription) &&
+      isActiveSubscription(customer, latestDataset.timestamp),
+  ).length;
+});
+
+const countRelevantActive = (dataset: DataSet): number =>
+  dataset.customers.filter(
+    (customer) =>
+      isRelevantSubscription(customer.subscription) &&
+      isActiveSubscription(customer, dataset.timestamp),
+  ).length;
+
+const annualGrowthPercent = computed(() => {
+  if (filteredDatasets.value.length < 2) return null;
+
+  const sortedDatasets = [...filteredDatasets.value].sort(
+    (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
+  );
+  const first = sortedDatasets[0];
+  const last = sortedDatasets[sortedDatasets.length - 1];
+
+  const firstCount = countRelevantActive(first);
+  const lastCount = countRelevantActive(last);
+
+  if (firstCount === 0) return null;
+  return ((lastCount - firstCount) / firstCount) * 100;
 });
 
 const subscriptionChartData = computed(() => {
@@ -857,7 +962,7 @@ const subscriptionChartData = computed(() => {
   const latestDataset =
     filteredDatasets.value[filteredDatasets.value.length - 1];
 
-  const data = subscriptionCategories.map((category) => {
+  const data = subscriptionCategoriesWithOther.map((category) => {
     return latestDataset.customers.filter(
       (c) =>
         !c.subscription.toLowerCase().includes("probetraining") &&
@@ -866,7 +971,7 @@ const subscriptionChartData = computed(() => {
   });
 
   return {
-    labels: subscriptionCategories,
+    labels: subscriptionCategoriesWithOther,
     datasets: [
       {
         data,
@@ -877,11 +982,11 @@ const subscriptionChartData = computed(() => {
 });
 
 const subscriptionBarData = computed(() => ({
-  labels: subscriptionCategories,
+  labels: subscriptionCategoriesWithOther,
   datasets: [
     {
       label: "Number of Subscriptions",
-      data: subscriptionCategories.map((category) =>
+      data: subscriptionCategoriesWithOther.map((category) =>
         filteredDatasets.value.length > 0
           ? filteredDatasets.value[
               filteredDatasets.value.length - 1
@@ -897,20 +1002,19 @@ const subscriptionBarData = computed(() => ({
   ],
 }));
 
-const allSubscriptionsRevenueData = computed(() => {
-  if (filteredDatasets.value.length === 0)
-    return { labels: [], datasets: [{ data: [] }] };
-
-  const latestDataset =
-    filteredDatasets.value[filteredDatasets.value.length - 1];
+const buildSubscriptionRevenueData = (
+  customers: Customer[],
+  predicate: (subscription: string) => boolean,
+) => {
   const subscriptionCounts = new Map<
     string,
     { count: number; revenue: number }
   >();
 
-  latestDataset.customers.forEach((customer) => {
+  customers.forEach((customer) => {
     const subscription = customer.subscription;
     if (subscription.toLowerCase().includes("probetraining")) return;
+    if (!predicate(subscription)) return;
 
     const price = getSubscriptionPrice(subscription);
 
@@ -943,6 +1047,29 @@ const allSubscriptionsRevenueData = computed(() => {
       },
     ],
   };
+};
+
+const relevantSubscriptionsRevenueData = computed(() => {
+  if (filteredDatasets.value.length === 0)
+    return { labels: [], datasets: [{ data: [] }] };
+
+  const latestDataset =
+    filteredDatasets.value[filteredDatasets.value.length - 1];
+  return buildSubscriptionRevenueData(latestDataset.customers, (sub) =>
+    isRelevantSubscription(sub),
+  );
+});
+
+const otherSubscriptionsRevenueData = computed(() => {
+  if (filteredDatasets.value.length === 0)
+    return { labels: [], datasets: [{ data: [] }] };
+
+  const latestDataset =
+    filteredDatasets.value[filteredDatasets.value.length - 1];
+  return buildSubscriptionRevenueData(
+    latestDataset.customers,
+    (sub) => !isRelevantSubscription(sub),
+  );
 });
 
 const relevantTypesRevenueData = computed(() => {
@@ -1287,7 +1414,7 @@ const revenuePerCustomerData = computed(() => {
     { customers: number; revenue: number; revenuePerCustomer: number }
   >();
 
-  relevantTypes.forEach((type) => {
+  [...relevantTypes, "Other"].forEach((type) => {
     typeData.set(type, {
       customers: 0,
       revenue: 0,
@@ -1300,9 +1427,8 @@ const revenuePerCustomerData = computed(() => {
 
     if (subscription.toLowerCase().includes("probetraining")) return;
 
-    const type = getSubscriptionType(subscription);
-
-    if (!relevantTypes.includes(type)) return;
+    const rawType = getSubscriptionType(subscription);
+    const type = relevantTypes.includes(rawType) ? rawType : "Other";
 
     const current = typeData.get(type)!;
 
@@ -1540,17 +1666,20 @@ const probetrainingData = computed(() => {
 const conversionChartData = computed(() => {
   if (filteredDatasets.value.length === 0) return { labels: [], datasets: [] };
 
-  const relevantTypes = ["Striking", "Grappling", "MMA", "Kinder"];
+  const conversionTypes = [...relevantTypes, "Other"];
   const customerTypeHistory = new Map<string, Map<string, Date>>(); // Map<email, Map<type, firstDate>>
 
   // Schritt 1: Durch alle Kunden iterieren und für jeden Typ den frühesten validFrom speichern
   for (const dataset of filteredDatasets.value) {
     for (const customer of dataset.customers) {
+      const subscription = customer.subscription || "";
+      if (subscription.toLowerCase().includes("probetraining")) continue;
+
       const email = customer.email || customer.name; // Fallback falls keine E-Mail
-      const type = getSubscriptionType(customer.subscription || "");
+      const rawType = getSubscriptionType(subscription);
+      const type = relevantTypes.includes(rawType) ? rawType : "Other";
       const validFrom = customer.validFrom;
 
-      if (!relevantTypes.includes(type)) continue;
       if (!(validFrom instanceof Date) || isNaN(validFrom.getTime())) continue;
 
       if (!customerTypeHistory.has(email)) {
@@ -1590,7 +1719,7 @@ const conversionChartData = computed(() => {
   );
 
   // Schritt 4: Daten für jedes Typ-Label kombinieren
-  const datasets = relevantTypes.map((type, index) => {
+  const datasets = conversionTypes.map((type, index) => {
     const data = sortedLabels.map((label) => {
       const map = conversionMap.get(label);
       return map?.get(type) || 0;
@@ -1824,18 +1953,16 @@ const cancellationsByMonth = computed(() => {
     for (const customer of dataset.customers) {
       const status = (customer.subscriptionStatus || "").toLowerCase();
       const subscription = customer.subscription || "";
-      const subscriptionType = getSubscriptionType(subscription);
+      if (subscription.toLowerCase().includes("probetraining")) continue;
 
-      if (
-        !["Striking", "Grappling", "Fit & Athletik", "MMA", "Kinder"].includes(
-          subscriptionType,
-        )
-      )
-        continue;
+      const subscriptionType = getSubscriptionType(subscription);
+      const bucketType = relevantTypes.includes(subscriptionType)
+        ? subscriptionType
+        : "Other";
 
       if (
         selectedCancellationFilter.value !== "All" &&
-        subscriptionType !== selectedCancellationFilter.value
+        bucketType !== selectedCancellationFilter.value
       )
         continue;
 
@@ -1885,14 +2012,17 @@ const cancellationsExpiringByMonth = computed(() => {
 
   for (const dataset of filteredDatasets.value) {
     for (const customer of dataset.customers) {
+      const subscription = customer.subscription || "";
+      if (subscription.toLowerCase().includes("probetraining")) continue;
+
       const email = customer.email || customer.id;
-      const type = getSubscriptionType(customer.subscription || "");
+      const type = getSubscriptionType(subscription);
+      const bucketType = relevantTypes.includes(type) ? type : "Other";
       const validFrom = customer.validFrom;
 
-      if (!relevantTypes.includes(type)) continue;
       if (!isValidDate(validFrom)) continue;
 
-      const key = `${email}-${type}`;
+      const key = `${email}-${bucketType}`;
 
       if (!futureSubscriptions.has(key)) {
         futureSubscriptions.set(key, []);
@@ -1911,14 +2041,16 @@ const cancellationsExpiringByMonth = computed(() => {
     for (const customer of dataset.customers) {
       const status = (customer.subscriptionStatus || "").toLowerCase();
       const subscription = customer.subscription || "";
+      if (subscription.toLowerCase().includes("probetraining")) continue;
+
       const validUntil = customer.validUntil;
       const type = getSubscriptionType(subscription);
+      const bucketType = relevantTypes.includes(type) ? type : "Other";
       const email = customer.email || customer.id;
 
-      if (!relevantTypes.includes(type)) continue;
       if (
         selectedCancellationFilter.value !== "All" &&
-        type !== selectedCancellationFilter.value
+        bucketType !== selectedCancellationFilter.value
       )
         continue;
 
@@ -1931,7 +2063,7 @@ const cancellationsExpiringByMonth = computed(() => {
       if (seen.has(dedupeKey)) continue;
       seen.add(dedupeKey);
 
-      const key = `${email}-${type}`;
+      const key = `${email}-${bucketType}`;
       const futureStarts = futureSubscriptions.get(key) || [];
 
       const hasFollowUp = futureStarts.some((start) => start > validUntil);
@@ -1973,6 +2105,7 @@ const filteredTableData = computed(() => {
     if (subscription.toLowerCase().includes("probetraining")) return;
 
     const type = getSubscriptionType(subscription);
+    const bucketType = relevantTypes.includes(type) ? type : "Other";
 
     const isProAbo =
       subscription.toLowerCase().includes("pro") &&
@@ -1986,7 +2119,7 @@ const filteredTableData = computed(() => {
     if (
       selectedTableFilter.value !== "All" &&
       selectedTableFilter.value !== "Pro Abos" &&
-      type !== selectedTableFilter.value
+      bucketType !== selectedTableFilter.value
     ) {
       return;
     }
@@ -2205,13 +2338,6 @@ const cancellationsChartOptions = {
 const cancellationsDrilldownTable = computed(() => {
   if (!selectedCancellationMonth.value) return [];
 
-  const allowedTypes = [
-    "Striking",
-    "Grappling",
-    "Fit & Athletik",
-    "MMA",
-    "Kinder",
-  ];
   const results: Array<{
     id: string;
     subscription: string;
@@ -2226,12 +2352,14 @@ const cancellationsDrilldownTable = computed(() => {
     for (const customer of dataset.customers) {
       const status = customer.subscriptionStatus || "";
       const subscription = customer.subscription || "";
-      const type = getSubscriptionType(subscription);
+      if (subscription.toLowerCase().includes("probetraining")) continue;
 
-      if (!allowedTypes.includes(type)) continue;
+      const type = getSubscriptionType(subscription);
+      const bucketType = relevantTypes.includes(type) ? type : "Other";
+
       if (
         selectedCancellationFilter.value !== "All" &&
-        type !== selectedCancellationFilter.value
+        bucketType !== selectedCancellationFilter.value
       )
         continue;
 
@@ -2499,14 +2627,23 @@ h3 {
   font-size: 0.9rem;
 }
 
-.process-button {
+.process-button,
+.reset-button {
   margin-top: 10px;
+  margin-left: 5px;
   padding: 8px 16px;
-  background-color: #4caf50;
   color: white;
   border: none;
   border-radius: 4px;
   cursor: pointer;
+}
+
+.process-button {
+  background-color: #4caf50;
+}
+
+.reset-button {
+  background-color: #999;
 }
 
 .process-button:disabled {
@@ -2527,6 +2664,14 @@ h3 {
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   text-align: center;
+}
+
+.stat-card .growth-positive {
+  color: #2e7d32;
+}
+
+.stat-card .growth-negative {
+  color: #c62828;
 }
 
 .charts-container {
