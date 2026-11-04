@@ -127,14 +127,14 @@
             <Bar :data="ageGroupDistributionData" :options="barChartOptions" />
           </div>
           <div class="chart wide-chart">
-            <h3>Current Subscriptions Revenue (Relevant Types)</h3>
+            <h3>Relevant Types Revenue (Verkauft im gewählten Jahr)</h3>
             <Bar
               :data="relevantSubscriptionsRevenueData"
               :options="revenueChartOptions"
             />
           </div>
           <div class="chart wide-chart">
-            <h3>Current Subscriptions Revenue (Other Types)</h3>
+            <h3>Other Types Revenue (Verkauft im gewählten Jahr)</h3>
             <Bar
               :data="otherSubscriptionsRevenueData"
               :options="revenueChartOptions"
@@ -207,6 +207,7 @@
                 'Fit & Athletik',
                 'MMA',
                 'Kinder',
+                'EarlyBird',
                 'Other',
               ]"
               :key="type"
@@ -287,7 +288,7 @@
           </table>
         </div>
         <div v-if="filteredDatasets.length > 0" class="subscription-table">
-          <h3>Subscription Revenue Overview</h3>
+          <h3>Subscription Revenue Overview (Verkauft im gewählten Jahr)</h3>
           <div class="table-filters">
             <button
               v-for="type in [
@@ -297,6 +298,7 @@
                 'Fit & Athletik',
                 'MMA',
                 'Kinder',
+                'EarlyBird',
                 'Other',
                 'Pro Abos',
               ]"
@@ -428,6 +430,7 @@ const relevantTypes = [
   "MMA",
   "Fit & Athletik",
   "Kinder",
+  "EarlyBird",
 ];
 
 const subscriptionPrices2026: SubscriptionPrice[] = [
@@ -436,17 +439,17 @@ const subscriptionPrices2026: SubscriptionPrice[] = [
   { name: "Striking 1 Jahr | Ratenzahlung", price: 1250 },
   { name: "Striking 6 Monate | reduziert | Ratenzahlung", price: 720 },
   { name: "Striking 6 Monate | Ratenzahlung", price: 850 },
-  { name: "MMA 6 Monate | Ratenzahlung", price: 996 },
-  { name: "Kinder & Jugendliche 6 Monate", price: 490 },
+  { name: "MMA 6 Monate | Ratenzahlung", price: 995 },
+  { name: "Kinder & Jugendliche 6 Monate", price: 499 },
   { name: "MMA Pro 6 Monate | reduziert | Ratenzahlung", price: 1240 },
   { name: "MMA Pro 1 Jahr | Ratenzahlung", price: 1905 },
-  { name: "MMA Pro 6 Monate | Ratenzahlung", price: 1391 },
+  { name: "MMA Pro 6 Monate | Ratenzahlung", price: 1390 },
   { name: "MMA Pro 1 Jahr | monatlich", price: 1980 },
   { name: "MMA Pro 1 Jahr | reduziert | monatlich", price: 1740 },
   { name: "Striking 1 Jahr | Legacy", price: 1250 },
   { name: "Week Pass Fit & Athletik", price: 50 },
   { name: "Grappling 1 Jahr", price: 995 },
-  { name: "Goal Getter Personal Training | monatlich", price: 130 },
+  { name: "Goal Getter Personal Training | monatlich", price: 145 },
   { name: "MMA 6 Monate | reduziert | Ratenzahlung", price: 845 },
   { name: "Grappling 1 Jahr | Ratenzahlung", price: 995 },
   { name: "Striking 1 Jahr", price: 1250 },
@@ -455,7 +458,7 @@ const subscriptionPrices2026: SubscriptionPrice[] = [
   { name: "Special Member", price: 0 },
   { name: "MMA Pro 1 Jahr", price: 1905 },
   { name: "Striking 1 Jahr | reduziert", price: 995 },
-  { name: "5x Personal Training Package", price: 695 },
+  { name: "5x Personal Training Package", price: 765 },
   { name: "Day Pass", price: 35 },
   { name: "Grappling 1 Jahr | reduziert", price: 850 },
   { name: "Striking 6 Monate", price: 850 },
@@ -463,7 +466,7 @@ const subscriptionPrices2026: SubscriptionPrice[] = [
   { name: "Striking 6 Monate | reduziert | monatlich", price: 780 },
   { name: "MMA 1 Jahr | reduziert | monatlich", price: 1320 },
   { name: "MMA 6 Monate | monatlich", price: 1170 },
-  { name: "MMA 6 Monate", price: 996 },
+  { name: "MMA 6 Monate", price: 995 },
   { name: "MMA 1 Jahr | reduziert", price: 1285 },
   { name: "MMA 1 Jahr", price: 1510 },
   { name: "Striking Pro 6 Monate | monatlich", price: 1320 },
@@ -473,20 +476,20 @@ const subscriptionPrices2026: SubscriptionPrice[] = [
   { name: "Grappling 6 Monate | reduziert", price: 580 },
   { name: "Grappling Pro 1 Jahr", price: 1390 },
   { name: "Grappling Pro 6 Monate | reduziert | monatlich", price: 1080 },
-  { name: "Grappling Pro 6 Monate", price: 935 },
-  { name: "Grappling Pro 6 Monate | reduziert", price: 830 },
+  { name: "Grappling Pro 6 Monate", price: 1080 },
+  { name: "Grappling Pro 6 Monate | reduziert", price: 975 },
   { name: "Fit & Athletik 1 Jahr", price: 1080 },
   { name: "Striking 6 Monate | monatlich", price: 780 },
   { name: "Grappling 1 Jahr | monatlich", price: 1080 },
   { name: "Fit & Athletik 6 Monate", price: 740 },
   { name: "Striking Pro 1 Jahr | monatlich", price: 1740 },
   { name: "Fit & Athletik 1 Jahr | reduziert", price: 920 },
-  { name: "12x Personal Training Package", price: 1190 },
+  { name: "12x Personal Training Package", price: 1315 },
   { name: "MMA Pro 6 Monate | monatlich", price: 1560 },
   { name: "WAKO Lizenz", price: 0 },
   { name: "NLZ Coach", price: 0 },
   { name: "Probetraining Abo Kinder & Jugendliche", price: 0 },
-  { name: "Next Level Personal Training | monatlich", price: 420 },
+  { name: "Next Level Personal Training | monatlich", price: 465 },
   { name: "MMA 1 Jahr | monatlich", price: 1560 },
   {
     name: "Nutrition One-Time Support: Messung der Körperzusammensetzung",
@@ -510,20 +513,20 @@ const subscriptionPrices2026: SubscriptionPrice[] = [
   { name: "Grappling Pro 1 Jahr | reduziert", price: 1245 },
   { name: "Striking Pro 1 Jahr | reduziert | Ratenzahlung", price: 1390 },
   { name: "Fit & Athletik 6 Monate | Ratenzahlung", price: 740 },
-  { name: "Grappling Pro 6 Monate | Ratenzahlung", price: 935 },
+  { name: "Grappling Pro 6 Monate | Ratenzahlung", price: 1080 },
   { name: "MTT - Medizinische Trainingstherapie", price: 50 },
-  { name: "Grappling Pro 6 Monate | reduziert | Ratenzahlung", price: 830 },
+  { name: "Grappling Pro 6 Monate | reduziert | Ratenzahlung", price: 975 },
   { name: "Striking Pro 1 Jahr | reduziert", price: 1390 },
   { name: "Striking Pro 1 Jahr | Legacy", price: 1645 },
   { name: "Striking Pro 6 Monate | reduziert", price: 1115 },
-  { name: "Eltern Kinder 1 Jahr | Ratenzahlung", price: 1160 },
-  { name: "Kinder & Jugendliche 1 Jahr | Ratenzahlung", price: 720 },
-  { name: "Kinder & Jugendliche 1 Jahr", price: 720 },
-  { name: "Kinder & Jugendliche 6 Monate | Ratenzahlung", price: 490 },
-  { name: "Athlete - Advanced Package Standart", price: 255 },
-  { name: "1x Single Personal Training", price: 150 },
-  { name: "Next Level Intense Personal Training | monatlich", price: 800 },
-  { name: "Athlete - Advanced Package Pro", price: 350 },
+  { name: "Eltern Kinder 1 Jahr | Ratenzahlung", price: 1169 },
+  { name: "Kinder & Jugendliche 1 Jahr | Ratenzahlung", price: 729 },
+  { name: "Kinder & Jugendliche 1 Jahr", price: 729 },
+  { name: "Kinder & Jugendliche 6 Monate | Ratenzahlung", price: 499 },
+  { name: "Athlete - Advanced Package Standart", price: 280 },
+  { name: "1x Single Personal Training", price: 160 },
+  { name: "Next Level Intense Personal Training | monatlich", price: 880 },
+  { name: "Athlete - Advanced Package Pro", price: 385 },
   { name: "Grappling 1 Jahr | reduziert | Ratenzahlung", price: 850 },
   { name: "Striking 6 Monate | reduziert", price: 720 },
   { name: "BJJ Kids Bullyproof", price: 0 },
@@ -535,9 +538,18 @@ const subscriptionPrices2026: SubscriptionPrice[] = [
   { name: "Striking Pro 1 Jahr", price: 1645 },
   { name: "Grappling 1 Jahr reduziert | Legacy", price: 850 },
   { name: "Striking 1 Jahr | reduziert | monatlich", price: 1080 },
-  { name: "Goal Getter Intense Personal Training | monatlich", price: 240 },
-  { name: "Eltern Kinder 1 Jahr", price: 1160 },
+  { name: "Goal Getter Intense Personal Training | monatlich", price: 265 },
+  { name: "Eltern Kinder 1 Jahr", price: 1169 },
+  { name: "Eltern Kinder 6 Monate", price: 799 },
   { name: "Striking 6 Monate | Legacy", price: 850 },
+  { name: "Open Gym 1 Jahr", price: 780 },
+  { name: "Open Gym 6 Monate", price: 555 },
+  { name: "Week Pass Ein Sport", price: 75 },
+  { name: "Week Pass All Access", price: 100 },
+  { name: "Open Mat", price: 20 },
+  { name: "Athlete - Advanced Package Basic", price: 370 },
+  { name: "Athlete - Advanced Package Pro Plus", price: 715 },
+  { name: "Competition Group Personal Training", price: 85 },
 ];
 
 const subscriptionPrices2025: SubscriptionPrice[] = [
@@ -695,6 +707,7 @@ const subscriptionCategories = [
   "MMA",
   "Fit & Athletik",
   "Kinder",
+  "EarlyBird",
   "Mitarbeiter",
 ];
 
@@ -711,6 +724,7 @@ const colorPalette = [
   "#5a91db",
   "#cccccc",
   "#7ab1fb",
+  "#f2a65a",
 ];
 
 const isValidDate = (date: any): boolean => {
@@ -771,9 +785,7 @@ const shouldCompareToPreviousYear = computed(() => {
 const isRelevantSubscription = (subscription: string): boolean => {
   if (subscription.toLowerCase().includes("probetraining")) return false;
   const type = getSubscriptionType(subscription);
-  return ["Striking", "Grappling", "MMA", "Fit & Athletik", "Kinder"].includes(
-    type,
-  );
+  return relevantTypes.includes(type);
 };
 
 // Ein Abo gilt als aktiv/gültig, solange "Gültig bis" (Stand des jeweiligen
@@ -799,6 +811,7 @@ const getSubscriptionType = (subscription: string): string => {
     subscriptionLower.includes("jugendliche")
   )
     return "Kinder";
+  if (subscriptionLower.includes("earlybird")) return "EarlyBird";
   if (subscriptionLower.includes("mitarbeiter")) return "Mitarbeiter";
   return "Other";
 };
@@ -1002,30 +1015,50 @@ const subscriptionBarData = computed(() => ({
   ],
 }));
 
-const buildSubscriptionRevenueData = (
-  customers: Customer[],
+// Revenue-Summe aller im gewählten Jahr verkauften Abos/Packages (Basis:
+// Kaufdatum), über alle hochgeladenen Datensätze hinweg dedupliziert pro
+// Kunde + Abo. Eine Momentaufnahme des letzten Datensatzes würde sowohl bei
+// Jahres-/6-Monats-Abos (bereits ausgelaufene Verkäufe fallen raus) als auch
+// bei Einmalkäufen (Personal Training Packages, Day/Week Pass etc. – kein
+// sinnvolles "aktuell gültig") den tatsächlichen Jahresumsatz verfälschen.
+const buildAnnualSubscriptionRevenueData = (
   predicate: (subscription: string) => boolean,
 ) => {
   const subscriptionCounts = new Map<
     string,
     { count: number; revenue: number }
   >();
+  const seen = new Set<string>();
 
-  customers.forEach((customer) => {
-    const subscription = customer.subscription;
-    if (subscription.toLowerCase().includes("probetraining")) return;
-    if (!predicate(subscription)) return;
+  for (const dataset of datasets.value) {
+    for (const customer of dataset.customers) {
+      const subscription = customer.subscription || "";
+      if (subscription.toLowerCase().includes("probetraining")) continue;
+      if (!predicate(subscription)) continue;
 
-    const price = getSubscriptionPrice(subscription);
+      const purchaseDate = customer.purchaseDate;
+      if (!isValidDate(purchaseDate)) continue;
+      if (
+        selectedYears.value.length > 0 &&
+        !selectedYears.value.includes(purchaseDate!.getFullYear())
+      )
+        continue;
 
-    if (!subscriptionCounts.has(subscription)) {
-      subscriptionCounts.set(subscription, { count: 0, revenue: 0 });
+      const dedupeKey = `${customer.id}-${subscription}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+
+      const price = getSubscriptionPrice(subscription);
+
+      if (!subscriptionCounts.has(subscription)) {
+        subscriptionCounts.set(subscription, { count: 0, revenue: 0 });
+      }
+
+      const current = subscriptionCounts.get(subscription)!;
+      current.count += 1;
+      current.revenue += price;
     }
-
-    const current = subscriptionCounts.get(subscription)!;
-    current.count += 1;
-    current.revenue += price;
-  });
+  }
 
   const sortedEntries = Array.from(subscriptionCounts.entries()).sort(
     (a, b) => b[1].revenue - a[1].revenue,
@@ -1049,28 +1082,13 @@ const buildSubscriptionRevenueData = (
   };
 };
 
-const relevantSubscriptionsRevenueData = computed(() => {
-  if (filteredDatasets.value.length === 0)
-    return { labels: [], datasets: [{ data: [] }] };
+const relevantSubscriptionsRevenueData = computed(() =>
+  buildAnnualSubscriptionRevenueData((sub) => isRelevantSubscription(sub)),
+);
 
-  const latestDataset =
-    filteredDatasets.value[filteredDatasets.value.length - 1];
-  return buildSubscriptionRevenueData(latestDataset.customers, (sub) =>
-    isRelevantSubscription(sub),
-  );
-});
-
-const otherSubscriptionsRevenueData = computed(() => {
-  if (filteredDatasets.value.length === 0)
-    return { labels: [], datasets: [{ data: [] }] };
-
-  const latestDataset =
-    filteredDatasets.value[filteredDatasets.value.length - 1];
-  return buildSubscriptionRevenueData(
-    latestDataset.customers,
-    (sub) => !isRelevantSubscription(sub),
-  );
-});
+const otherSubscriptionsRevenueData = computed(() =>
+  buildAnnualSubscriptionRevenueData((sub) => !isRelevantSubscription(sub)),
+);
 
 const relevantTypesRevenueData = computed(() => {
   if (filteredDatasets.value.length === 0)
@@ -2090,67 +2108,82 @@ const cancellationsExpiringByMonth = computed(() => {
   };
 });
 
+// Analog zur "Other Types Revenue": nicht der letzte Snapshot wird gezählt,
+// sondern die Summe des Revenue aller im gewählten Jahr verkauften/
+// abgeschlossenen Abos (Basis: Kaufdatum), über alle Datensätze hinweg
+// dedupliziert pro Kunde + Abo.
 const filteredTableData = computed(() => {
-  if (filteredDatasets.value.length === 0) return [];
-
-  const latestDataset =
-    filteredDatasets.value[filteredDatasets.value.length - 1];
   const subscriptionData = new Map<
     string,
     { count: number; price: number; revenue: number; proRevenue: number }
   >();
+  const seen = new Set<string>();
 
-  latestDataset.customers.forEach((customer) => {
-    const subscription = customer.subscription;
-    if (subscription.toLowerCase().includes("probetraining")) return;
+  for (const dataset of datasets.value) {
+    for (const customer of dataset.customers) {
+      const subscription = customer.subscription || "";
+      if (subscription.toLowerCase().includes("probetraining")) continue;
 
-    const type = getSubscriptionType(subscription);
-    const bucketType = relevantTypes.includes(type) ? type : "Other";
+      const purchaseDate = customer.purchaseDate;
+      if (!isValidDate(purchaseDate)) continue;
+      if (
+        selectedYears.value.length > 0 &&
+        !selectedYears.value.includes(purchaseDate!.getFullYear())
+      )
+        continue;
 
-    const isProAbo =
-      subscription.toLowerCase().includes("pro") &&
-      !subscription.toLowerCase().includes("probetraining") &&
-      (subscription.toLowerCase().includes("striking") ||
-        subscription.toLowerCase().includes("grappling") ||
-        subscription.toLowerCase().includes("mma"));
+      const dedupeKey = `${customer.id}-${subscription}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
 
-    // Überprüfen, ob der Filter "Pro Abos" aktiv ist
-    if (selectedTableFilter.value === "Pro Abos" && !isProAbo) return;
-    if (
-      selectedTableFilter.value !== "All" &&
-      selectedTableFilter.value !== "Pro Abos" &&
-      bucketType !== selectedTableFilter.value
-    ) {
-      return;
-    }
+      const type = getSubscriptionType(subscription);
+      const bucketType = relevantTypes.includes(type) ? type : "Other";
 
-    const price = getSubscriptionPrice(subscription);
-    let proRevenue = 0;
+      const isProAbo =
+        subscription.toLowerCase().includes("pro") &&
+        !subscription.toLowerCase().includes("probetraining") &&
+        (subscription.toLowerCase().includes("striking") ||
+          subscription.toLowerCase().includes("grappling") ||
+          subscription.toLowerCase().includes("mma"));
 
-    if (selectedTableFilter.value === "Pro Abos") {
-      if (subscription.toLowerCase().includes("6 monate")) {
-        proRevenue =
-          250 * ((subscriptionData.get(subscription)?.count ?? 0 + 1) + 1);
-      } else if (subscription.toLowerCase().includes("1 jahr")) {
-        proRevenue =
-          395 * ((subscriptionData.get(subscription)?.count ?? 0 + 1) + 1);
+      // Überprüfen, ob der Filter "Pro Abos" aktiv ist
+      if (selectedTableFilter.value === "Pro Abos" && !isProAbo) continue;
+      if (
+        selectedTableFilter.value !== "All" &&
+        selectedTableFilter.value !== "Pro Abos" &&
+        bucketType !== selectedTableFilter.value
+      ) {
+        continue;
       }
-    }
 
-    if (!subscriptionData.has(subscription)) {
-      subscriptionData.set(subscription, {
-        count: 0,
-        price,
-        revenue: 0,
-        proRevenue: 0,
-      });
-    }
+      const price = getSubscriptionPrice(subscription);
+      let proRevenue = 0;
 
-    const data = subscriptionData.get(subscription)!;
-    data.count += 1;
-    data.revenue = data.count * data.price;
-    data.proRevenue = proRevenue;
-  });
+      if (selectedTableFilter.value === "Pro Abos") {
+        if (subscription.toLowerCase().includes("6 monate")) {
+          proRevenue =
+            250 * ((subscriptionData.get(subscription)?.count ?? 0 + 1) + 1);
+        } else if (subscription.toLowerCase().includes("1 jahr")) {
+          proRevenue =
+            395 * ((subscriptionData.get(subscription)?.count ?? 0 + 1) + 1);
+        }
+      }
+
+      if (!subscriptionData.has(subscription)) {
+        subscriptionData.set(subscription, {
+          count: 0,
+          price,
+          revenue: 0,
+          proRevenue: 0,
+        });
+      }
+
+      const data = subscriptionData.get(subscription)!;
+      data.count += 1;
+      data.revenue = data.count * data.price;
+      data.proRevenue = proRevenue;
+    }
+  }
 
   return Array.from(subscriptionData.entries())
     .map(([subscription, data]) => ({
