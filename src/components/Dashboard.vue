@@ -318,6 +318,7 @@
                 <th>Subscription Type</th>
                 <th>Count</th>
                 <th>Price (CHF)</th>
+                <th>Revenue ohne Pro Anteil (CHF)</th>
                 <th>Total Revenue (CHF)</th>
                 <th v-if="selectedTableFilter === 'Pro Abos'">
                   Pro Revenue (CHF)
@@ -329,6 +330,7 @@
                 <td>{{ row.subscription }}</td>
                 <td>{{ row.count }}</td>
                 <td>{{ row.price.toLocaleString() }}</td>
+                <td>{{ row.revenueWithoutPro.toLocaleString() }}</td>
                 <td>{{ row.revenue.toLocaleString() }}</td>
                 <td v-if="selectedTableFilter === 'Pro Abos'">
                   {{ row.proRevenue.toLocaleString() }}
@@ -338,6 +340,7 @@
                 <td>Total</td>
                 <td>{{ totalCount }}</td>
                 <td>-</td>
+                <td>{{ totalRevenueWithoutPro.toLocaleString() }}</td>
                 <td>{{ totalRevenue.toLocaleString() }}</td>
                 <td v-if="selectedTableFilter === 'Pro Abos'">
                   {{ totalProRevenue.toLocaleString() }}
@@ -2112,10 +2115,20 @@ const cancellationsExpiringByMonth = computed(() => {
 // sondern die Summe des Revenue aller im gewählten Jahr verkauften/
 // abgeschlossenen Abos (Basis: Kaufdatum), über alle Datensätze hinweg
 // dedupliziert pro Kunde + Abo.
+// Der Pro-Zuschlag ist für alle Abotypen/Laufzeiten einheitlich CHF 395.-
+// (siehe subscriptionPrices-Preislisten).
+const PRO_SURCHARGE = 395;
+
 const filteredTableData = computed(() => {
   const subscriptionData = new Map<
     string,
-    { count: number; price: number; revenue: number; proRevenue: number }
+    {
+      count: number;
+      price: number;
+      revenue: number;
+      revenueWithoutPro: number;
+      proRevenue: number;
+    }
   >();
   const seen = new Set<string>();
 
@@ -2174,6 +2187,7 @@ const filteredTableData = computed(() => {
           count: 0,
           price,
           revenue: 0,
+          revenueWithoutPro: 0,
           proRevenue: 0,
         });
       }
@@ -2181,6 +2195,8 @@ const filteredTableData = computed(() => {
       const data = subscriptionData.get(subscription)!;
       data.count += 1;
       data.revenue = data.count * data.price;
+      data.revenueWithoutPro =
+        data.count * (data.price - (isProAbo ? PRO_SURCHARGE : 0));
       data.proRevenue = proRevenue;
     }
   }
@@ -2199,6 +2215,13 @@ const totalCount = computed(() => {
 
 const totalRevenue = computed(() => {
   return filteredTableData.value.reduce((sum, row) => sum + row.revenue, 0);
+});
+
+const totalRevenueWithoutPro = computed(() => {
+  return filteredTableData.value.reduce(
+    (sum, row) => sum + row.revenueWithoutPro,
+    0,
+  );
 });
 
 // Berechnung der Gesamtsumme für Pro Revenue
